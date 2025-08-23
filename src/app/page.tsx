@@ -525,7 +525,7 @@ function HomeContent() {
                 </label>
                 {/* スマホ表示: 見出しと入力フィールドを横並び */}
                 <div className="sm:hidden flex items-center space-x-2">
-                  <label className="text-xs font-medium text-gray-700 w-8 flex-shrink-0">
+                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     IN
                   </label>
                   <input
@@ -554,7 +554,7 @@ function HomeContent() {
                 </label>
                 {/* スマホ表示: 見出しと入力フィールドを横並び */}
                 <div className="sm:hidden flex items-center space-x-2">
-                  <label className="text-xs font-medium text-gray-700 w-8 flex-shrink-0">
+                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     OUT
                   </label>
                   <input
@@ -583,7 +583,7 @@ function HomeContent() {
                 </label>
                 {/* スマホ表示: 見出しとプルダウンを横並び */}
                 <div className="sm:hidden flex items-center space-x-2">
-                  <label className="text-xs font-medium text-gray-700 w-8 flex-shrink-0">
+                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     人数
                   </label>
                   <select
@@ -623,7 +623,7 @@ function HomeContent() {
                 </label>
                 {/* スマホ表示: 見出しとプルダウンを横並び */}
                 <div className="md:hidden flex items-center space-x-2">
-                  <label className="text-xs font-medium text-gray-700 w-8 flex-shrink-0">
+                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     場所
                   </label>
                   <select
@@ -701,7 +701,7 @@ function HomeContent() {
                 </label>
                 {/* スマホ表示: 見出しとプルダウンを横並び */}
                 <div className="md:hidden flex items-center space-x-2">
-                  <label className="text-xs font-medium text-gray-700 w-8 flex-shrink-0">
+                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     価格
                   </label>
                   <select
