@@ -17,7 +17,7 @@ import { cacheManager } from "@/lib/cache";
 import { apiOptimizer } from "@/lib/api-optimizer";
 import { trackHotelSearch, trackLocationUsage, trackFilterUsage } from "@/lib/analytics";
 
-type AreaFilter = "全て" | "新宿" | "渋谷" | "上野";
+type AreaFilter = "全て" | "新宿" | "渋谷" | "上野" | "新橋" | "池袋" | "六本木";
 type PriceFilter = "指定なし" | "~5000" | "~10000" | "10000~";
 
 // 現在の日付をYYYY-MM-DD形式で取得
@@ -67,6 +67,9 @@ function HomeContent() {
     if (area === "shinjuku") setAreaFilter("新宿");
     else if (area === "shibuya") setAreaFilter("渋谷");
     else if (area === "ueno") setAreaFilter("上野");
+    else if (area === "shinbashi") setAreaFilter("新橋");
+    else if (area === "ikebukuro") setAreaFilter("池袋");
+    else if (area === "roppongi") setAreaFilter("六本木");
     else setAreaFilter("全て");
 
     if (price === "lt5k") setPriceFilter("~5000");
@@ -130,6 +133,9 @@ function HomeContent() {
     if (newArea === "新宿") params.set("area", "shinjuku");
     else if (newArea === "渋谷") params.set("area", "shibuya");
     else if (newArea === "上野") params.set("area", "ueno");
+    else if (newArea === "新橋") params.set("area", "shinbashi");
+    else if (newArea === "池袋") params.set("area", "ikebukuro");
+    else if (newArea === "六本木") params.set("area", "roppongi");
     
     // price
     if (newPrice === "~5000") params.set("price", "lt5k");
@@ -214,7 +220,10 @@ function HomeContent() {
         const coordinates = {
           "新宿": { lat: 35.6896, lng: 139.6917 },
           "渋谷": { lat: 35.6580, lng: 139.7016 }, 
-          "上野": { lat: 35.7141, lng: 139.7774 }
+          "上野": { lat: 35.7141, lng: 139.7774 },
+          "新橋": { lat: 35.6662, lng: 139.7580 },
+          "池袋": { lat: 35.7295, lng: 139.7109 },
+          "六本木": { lat: 35.6627, lng: 139.7314 }
         };
         const coord = coordinates[areaFilter as keyof typeof coordinates];
         if (coord) {
@@ -644,6 +653,9 @@ function HomeContent() {
                     <option value="新宿">新宿</option>
                     <option value="渋谷">渋谷</option>
                     <option value="上野">上野</option>
+                    <option value="新橋">新橋</option>
+                    <option value="池袋">池袋</option>
+                    <option value="六本木">六本木</option>
                   </select>
                 </div>
                 {/* デスクトップ表示: 通常のプルダウン */}
@@ -666,6 +678,9 @@ function HomeContent() {
                     <option value="新宿">新宿</option>
                     <option value="渋谷">渋谷</option>
                     <option value="上野">上野</option>
+                    <option value="新橋">新橋</option>
+                    <option value="池袋">池袋</option>
+                    <option value="六本木">六本木</option>
                   </select>
                   {useCurrentLocation && currentLocation && (
                     <p className="text-xs text-green-600 flex items-center">
