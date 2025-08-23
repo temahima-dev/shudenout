@@ -42,17 +42,27 @@ function normalizeText(text: string): string {
  * @returns 品質基準を満たす場合true
  */
 export function isQualityHotel(hotel: Hotel): boolean {
-  // ホテル名を正規化（全角→半角、小文字化）
-  const normalizedHotelName = normalizeText(hotel.name);
+  // 1. 価格チェック: 4000円以上
+  if (hotel.price < 4000) {
+    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: 価格が4000円未満 - ${hotel.price}円)`);
+    return false;
+  }
 
-  // 除外ワードチェック（ひとつでも含まれていれば除外）
+  // 2. 評価チェック: 3.0以上
+  if (hotel.rating && hotel.rating < 3.0) {
+    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: 評価が3.0未満 - ${hotel.rating})`);
+    return false;
+  }
+
+  // 3. 除外ワードチェック（低品質ホテル）
+  const normalizedHotelName = normalizeText(hotel.name);
   const matchedWord = LOW_QUALITY_WORDS.find(word => {
     const normalizedWord = normalizeText(word);
     return normalizedHotelName.includes(normalizedWord);
   });
   
   if (matchedWord) {
-    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: "${matchedWord}")`);
+    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: 除外ワード "${matchedWord}")`);
     return false;
   }
 
