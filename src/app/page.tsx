@@ -524,9 +524,9 @@ function HomeContent() {
                   チェックイン
                 </label>
                 {/* スマホ表示: 見出しと入力フィールドを横並び */}
-                <div className="sm:hidden flex items-center space-x-3">
-                  <label className="text-sm font-medium text-gray-700 w-24 flex-shrink-0">
-                    チェックイン
+                <div className="sm:hidden flex items-center space-x-2">
+                  <label className="text-xs font-medium text-gray-700 w-16 flex-shrink-0">
+                    IN
                   </label>
                   <input
                     type="date"
@@ -553,9 +553,9 @@ function HomeContent() {
                   チェックアウト
                 </label>
                 {/* スマホ表示: 見出しと入力フィールドを横並び */}
-                <div className="sm:hidden flex items-center space-x-3">
-                  <label className="text-sm font-medium text-gray-700 w-24 flex-shrink-0">
-                    チェックアウト
+                <div className="sm:hidden flex items-center space-x-2">
+                  <label className="text-xs font-medium text-gray-700 w-16 flex-shrink-0">
+                    OUT
                   </label>
                   <input
                     type="date"
@@ -583,7 +583,7 @@ function HomeContent() {
                 </label>
                 {/* スマホ表示: 見出しとプルダウンを横並び */}
                 <div className="sm:hidden flex items-center space-x-3">
-                  <label className="text-sm font-medium text-gray-700 w-24 flex-shrink-0">
+                  <label className="text-sm font-medium text-gray-700 w-20 flex-shrink-0">
                     人数
                   </label>
                   <select
