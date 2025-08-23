@@ -32,6 +32,10 @@ const AREA_MAP: Record<string, string> = {
 };
 
 export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[]> {
+  // 一時的に無効化 - デバッグ用
+  console.log('Jalan API temporarily disabled for debugging');
+  return [];
+  
   // APIキー未設定なら空配列
   if (!process.env.JALAN_API_KEY) {
     return [];
@@ -49,16 +53,24 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
       order: '1' // 料金昇順
     });
 
-    const response = await fetch(
-      `https://jws.jalan.net/APICommon/HotelSearch?${searchParams}`,
-      { cache: 'no-store' }
-    );
+    const url = `https://jws.jalan.net/APICommon/HotelSearch?${searchParams}`;
+    console.log('Jalan API URL:', url);
+    
+    const response = await fetch(url, { 
+      cache: 'no-store',
+      headers: {
+        'User-Agent': 'ShudenOut/1.0'
+      }
+    });
 
     if (!response.ok) {
+      console.log('Jalan API HTTP error:', response.status, response.statusText);
       return [];
     }
 
     const data = await response.json();
+    console.log('Jalan API response:', data);
+    
     const hotels = data?.Results?.Hotel || [];
 
     return hotels.map((hotel: JalanHotel, index: number): NormalizedHotel => ({
