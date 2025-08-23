@@ -131,10 +131,21 @@ export async function GET(request: NextRequest) {
     // VacantHotelSearch API制限のため、常にSimpleHotelSearchを使用
     // 日付・人数情報はアフィリエイトURLに反映される
     console.log("楽天API SimpleHotelSearch を実行:", apiParams);
-    const result = await searchHotels(apiParams);
+    
+    // 緊急回避: モックデータを一時的に返す
+    console.log("緊急回避中: モックデータを返します");
+    const { HOTELS } = await import("@/app/data/hotels");
+    const result = {
+      items: HOTELS.slice(0, 10),
+      paging: { total: HOTELS.length, page: 1, totalPages: Math.ceil(HOTELS.length / 10), hasNext: true }
+    };
+    
+    // const result = await searchHotels(apiParams);
 
     // 品質フィルターを適用（低品質ホテルを除外）
-    const qualityFilteredItems = filterQualityHotels(result.items);
+    // 一時的に無効化 - デバッグ用
+    const qualityFilteredItems = result.items;
+    console.log("品質フィルター無効化中。元の件数:", result.items.length);
 
     return NextResponse.json({
       ...result,
