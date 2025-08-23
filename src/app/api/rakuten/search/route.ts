@@ -143,9 +143,8 @@ export async function GET(request: NextRequest) {
     // const result = await searchHotels(apiParams);
 
     // 品質フィルターを適用（低品質ホテルを除外）
-    // 一時的に無効化 - デバッグ用
-    const qualityFilteredItems = result.items;
-    console.log("品質フィルター無効化中。元の件数:", result.items.length);
+    const qualityFilteredItems = filterQualityHotels(result.items);
+    console.log("品質フィルター適用後:", qualityFilteredItems.length, "/", result.items.length);
 
     return NextResponse.json({
       ...result,
