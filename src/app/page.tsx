@@ -229,13 +229,13 @@ function HomeContent() {
         if (coord) {
           rakutenParams.set("lat", coord.lat.toString());
           rakutenParams.set("lng", coord.lng.toString());
-          rakutenParams.set("radiusKm", "1.5"); // 1.5km圏内
+          rakutenParams.set("radiusKm", "2.0"); // 2.0km圏内
         }
       } else {
-        // 全て選択時は東京駅周辺
-        rakutenParams.set("lat", "35.681236");
-        rakutenParams.set("lng", "139.767125");
-        rakutenParams.set("radiusKm", "5.0"); // 5km圏内
+        // 全て選択時は東京都内広範囲（新宿を中心により広く）
+        rakutenParams.set("lat", "35.6896"); // 新宿座標
+        rakutenParams.set("lng", "139.6917");
+        rakutenParams.set("radiusKm", "10.0"); // 10km圏内（東京都内ほぼ全域）
       }
       
       // 価格フィルタ
