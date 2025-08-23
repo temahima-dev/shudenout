@@ -516,44 +516,92 @@ function HomeContent() {
             <p className="text-sm text-gray-600 mb-4">
               希望の日付・人数を指定してホテルを検索できます。空室状況は各予約サイトでご確認ください。
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {/* チェックイン日 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                {/* デスクトップ表示: 見出しを上に配置 */}
+                <label className="hidden sm:block text-sm font-medium text-gray-700 mb-2">
                   チェックイン
                 </label>
+                {/* スマホ表示: 見出しと入力フィールドを横並び */}
+                <div className="sm:hidden flex items-center space-x-3">
+                  <label className="text-sm font-medium text-gray-700 w-24 flex-shrink-0">
+                    チェックイン
+                  </label>
+                  <input
+                    type="date"
+                    value={checkinDate}
+                    min={getTodayString()}
+                    onChange={(e) => handleCheckinDateChange(e.target.value)}
+                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
+                  />
+                </div>
+                {/* デスクトップ表示: 通常の入力フィールド */}
                 <input
                   type="date"
                   value={checkinDate}
                   min={getTodayString()}
                   onChange={(e) => handleCheckinDateChange(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
+                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
                 />
               </div>
 
               {/* チェックアウト日 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                {/* デスクトップ表示: 見出しを上に配置 */}
+                <label className="hidden sm:block text-sm font-medium text-gray-700 mb-2">
                   チェックアウト
                 </label>
+                {/* スマホ表示: 見出しと入力フィールドを横並び */}
+                <div className="sm:hidden flex items-center space-x-3">
+                  <label className="text-sm font-medium text-gray-700 w-24 flex-shrink-0">
+                    チェックアウト
+                  </label>
+                  <input
+                    type="date"
+                    value={checkoutDate}
+                    min={checkinDate}
+                    onChange={(e) => handleCheckoutDateChange(e.target.value)}
+                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
+                  />
+                </div>
+                {/* デスクトップ表示: 通常の入力フィールド */}
                 <input
                   type="date"
                   value={checkoutDate}
                   min={checkinDate}
                   onChange={(e) => handleCheckoutDateChange(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
+                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
                 />
               </div>
 
               {/* 人数 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                {/* デスクトップ表示: 見出しを上に配置 */}
+                <label className="hidden sm:block text-sm font-medium text-gray-700 mb-2">
                   人数
                 </label>
+                {/* スマホ表示: 見出しとプルダウンを横並び */}
+                <div className="sm:hidden flex items-center space-x-3">
+                  <label className="text-sm font-medium text-gray-700 w-24 flex-shrink-0">
+                    人数
+                  </label>
+                  <select
+                    value={adultNum}
+                    onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
+                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
+                  >
+                    <option value={2}>2人</option>
+                    <option value={1}>1人</option>
+                    <option value={3}>3人</option>
+                    <option value={4}>4人</option>
+                  </select>
+                </div>
+                {/* デスクトップ表示: 通常のプルダウン */}
                 <select
                   value={adultNum}
                   onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
+                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
                 >
                   <option value={2}>2人</option>
                   <option value={1}>1人</option>
@@ -569,10 +617,37 @@ function HomeContent() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* エリアフィルタ */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
+                {/* デスクトップ表示: 見出しを上に配置 */}
+                <label className="hidden md:block text-sm font-medium text-gray-700">
                   エリア
                 </label>
-                <div className="space-y-2">
+                {/* スマホ表示: 見出しとプルダウンを横並び */}
+                <div className="md:hidden flex items-center space-x-3">
+                  <label className="text-sm font-medium text-gray-700 w-20 flex-shrink-0">
+                    エリア
+                  </label>
+                  <select
+                    value={useCurrentLocation ? "現在地" : areaFilter}
+                    onChange={(e) => {
+                      if (e.target.value === "現在地") {
+                        handleGetCurrentLocation();
+                      } else {
+                        setUseCurrentLocation(false);
+                        handleAreaChange(e.target.value as AreaFilter);
+                      }
+                    }}
+                    disabled={isGettingLocation}
+                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm disabled:opacity-50 text-base"
+                  >
+                    <option value="全て">全て</option>
+                    <option value="現在地">📍 現在地から検索</option>
+                    <option value="新宿">新宿</option>
+                    <option value="渋谷">渋谷</option>
+                    <option value="上野">上野</option>
+                  </select>
+                </div>
+                {/* デスクトップ表示: 通常のプルダウン */}
+                <div className="hidden md:block space-y-2">
                   <select
                     value={useCurrentLocation ? "現在地" : areaFilter}
                     onChange={(e) => {
@@ -603,17 +678,48 @@ function HomeContent() {
                     </p>
                   )}
                 </div>
+                {/* スマホ表示: ステータス表示 */}
+                <div className="md:hidden">
+                  {useCurrentLocation && currentLocation && (
+                    <p className="text-xs text-green-600 flex items-center mt-1">
+                      ✅ 現在地を使用中 (半径1km)
+                    </p>
+                  )}
+                  {isGettingLocation && (
+                    <p className="text-xs text-blue-600 flex items-center mt-1">
+                      📍 位置情報を取得中...
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* 価格帯フィルタ */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                {/* デスクトップ表示: 見出しを上に配置 */}
+                <label className="hidden md:block text-sm font-medium text-gray-700 mb-2">
                   価格帯
                 </label>
+                {/* スマホ表示: 見出しとプルダウンを横並び */}
+                <div className="md:hidden flex items-center space-x-3">
+                  <label className="text-sm font-medium text-gray-700 w-20 flex-shrink-0">
+                    価格帯
+                  </label>
+                  <select
+                    value={priceFilter}
+                    onChange={(e) => handlePriceChange(e.target.value as PriceFilter)}
+                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-base"
+                  >
+                    <option value="指定なし">指定なし</option>
+                    <option value="~5000">~5,000円</option>
+                    <option value="~10000">~10,000円</option>
+                    <option value="10000~">10,000円~</option>
+                  </select>
+                </div>
+                {/* デスクトップ表示: 通常のプルダウン */}
                 <select
                   value={priceFilter}
                   onChange={(e) => handlePriceChange(e.target.value as PriceFilter)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                  className="hidden md:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
                 >
                   <option value="指定なし">指定なし</option>
                   <option value="~5000">~5,000円</option>
@@ -622,26 +728,26 @@ function HomeContent() {
                 </select>
               </div>
 
-                          {/* 設備フィルタ */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                設備
-              </label>
-              <div className="space-y-2">
-                {["シャワー", "WiFi", "2人可"].map((amenity) => (
-                  <label key={amenity} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={amenityFilters.includes(amenity)}
-                      onChange={() => handleAmenityToggle(amenity)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">{amenity}</span>
-                  </label>
-                ))}
+              {/* 設備フィルタ */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  設備
+                </label>
+                <div className="space-y-2">
+                  {["シャワー", "WiFi", "2人可"].map((amenity) => (
+                    <label key={amenity} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={amenityFilters.includes(amenity)}
+                        onChange={() => handleAmenityToggle(amenity)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{amenity}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
           </div>
         </div>
       </section>
