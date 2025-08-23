@@ -132,15 +132,29 @@ export async function GET(request: NextRequest) {
     // 日付・人数情報はアフィリエイトURLに反映される
     console.log("楽天API SimpleHotelSearch を実行:", apiParams);
     
-    // 緊急回避: モックデータを一時的に返す
-    console.log("緊急回避中: モックデータを返します");
-    const { HOTELS } = await import("@/app/data/hotels");
-    const result = {
-      items: HOTELS.slice(0, 10),
-      paging: { total: HOTELS.length, page: 1, totalPages: Math.ceil(HOTELS.length / 10), hasNext: true }
-    };
-    
-    // const result = await searchHotels(apiParams);
+    const result = await searchHotels(apiParams);
+    console.log("楽天API結果件数:", result.items.length);
+
+    // 楽天APIの結果が空の場合はモックデータを使用
+    if (result.items.length === 0) {
+      console.log("楽天API結果が空のため、モックデータを使用");
+      const { HOTELS } = await import("@/app/data/hotels");
+      const mockResult = {
+        items: HOTELS.slice(0, 20),
+        paging: { total: HOTELS.length, page: 1, totalPages: Math.ceil(HOTELS.length / 20), hasNext: true }
+      };
+      const qualityFilteredItems = filterQualityHotels(mockResult.items);
+      
+      return NextResponse.json({
+        ...mockResult,
+        items: qualityFilteredItems,
+        paging: {
+          ...mockResult.paging,
+          total: qualityFilteredItems.length
+        },
+        fallback: true, // モックデータ使用中
+      });
+    }
 
     // 品質フィルターを適用（低品質ホテルを除外）
     const qualityFilteredItems = filterQualityHotels(result.items);
