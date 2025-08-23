@@ -132,8 +132,34 @@ export async function GET(request: NextRequest) {
     // 日付・人数情報はアフィリエイトURLに反映される
     console.log("楽天API SimpleHotelSearch を実行:", apiParams);
     
-    const result = await searchHotels(apiParams);
-    console.log("楽天API結果件数:", result.items.length);
+    // 楽天・じゃらん並行検索
+    const { searchJalan } = await import("@/lib/providers/jalan");
+    const { dedupeAndMerge } = await import("@/lib/merge");
+    
+    const [rakutenResult, jalanHotels] = await Promise.all([
+      searchHotels(apiParams),
+      searchJalan({
+        lat: apiParams.lat,
+        lng: apiParams.lng,
+        radiusKm: apiParams.radiusKm,
+        priceMin: apiParams.minCharge,
+        priceMax: apiParams.maxCharge,
+        page: apiParams.page,
+        hits: apiParams.hits
+      })
+    ]);
+    
+    console.log("楽天API結果件数:", rakutenResult.items.length);
+    console.log("じゃらんAPI結果件数:", jalanHotels.length);
+    
+    // 結果を統合・重複除去
+    const combinedItems = dedupeAndMerge(rakutenResult.items, jalanHotels);
+    console.log("統合後件数:", combinedItems.length);
+    
+    const result = {
+      ...rakutenResult,
+      items: combinedItems
+    };
 
     // 楽天APIの結果が空の場合はモックデータを使用
     if (result.items.length === 0) {
