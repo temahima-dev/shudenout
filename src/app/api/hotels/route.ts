@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchHotels } from "@/lib/providers/rakuten";
+import { searchJalan } from "@/lib/providers/jalan";
+import { dedupeAndMerge } from "@/lib/merge";
 import { HOTELS } from "@/app/data/hotels";
 import { filterQualityHotels } from "@/lib/filters/quality";
 
@@ -14,20 +16,32 @@ export async function GET(request: NextRequest) {
     const amenities = searchParams.get("amenities")?.split(",").filter(Boolean) || undefined;
     const page = searchParams.get("page") ? parseInt(searchParams.get("page")!) : 1;
     
-    // 楽天APIを呼び出し（新しい形式に合わせて座標ベース検索）
-    const result = await searchHotels({
-      lat: 35.6896, // デフォルト：新宿
-      lng: 139.6917,
-      radiusKm: 3.0,
-      page,
-      hits: 30,
-      minCharge: minPrice,
-      maxCharge: maxPrice,
-      sort: "+roomCharge" as "+roomCharge"
-    });
+    // 楽天・じゃらん並行検索
+    const [rakutenResult, jalanHotels] = await Promise.all([
+      searchHotels({
+        lat: 35.6896, // デフォルト：新宿
+        lng: 139.6917,
+        radiusKm: 3.0,
+        page,
+        hits: 30,
+        minCharge: minPrice,
+        maxCharge: maxPrice,
+        sort: "+roomCharge" as "+roomCharge"
+      }),
+      searchJalan({
+        area,
+        priceMin: minPrice,
+        priceMax: maxPrice,
+        page,
+        hits: 30
+      })
+    ]);
     
-    // 楽天APIが失敗した場合（空配列）はモックデータを返す
-    if (result.items.length === 0) {
+    // 結果を統合
+    const combinedHotels = dedupeAndMerge(rakutenResult.items, jalanHotels);
+    
+    // 楽天・じゃらん両方が空の場合はモックデータを返す
+    if (combinedHotels.length === 0) {
       console.log("楽天API結果が空のため、モックデータを使用");
       
       // モックデータにフィルタリングを適用
@@ -60,7 +74,7 @@ export async function GET(request: NextRequest) {
     }
     
     // 品質フィルターを適用
-    const qualityFilteredItems = filterQualityHotels(result.items);
+    const qualityFilteredItems = filterQualityHotels(combinedHotels);
     
     return NextResponse.json({ hotels: qualityFilteredItems, success: true });
   } catch (error) {
