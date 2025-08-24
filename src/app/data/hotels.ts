@@ -14,6 +14,8 @@ export interface Hotel {
   // 計算された距離情報
   distanceKm?: number;
   walkingTimeMinutes?: number;
+  // デバッグ用: 楽天APIから提供された元のURL（本番で一時的に使用、後で削除）
+  originalUrl?: string;
 }
 
 export const HOTELS: Hotel[] = [

@@ -173,6 +173,8 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
     rating: rakutenHotel.reviewAverage > 0 ? rakutenHotel.reviewAverage : undefined,
     latitude: rakutenHotel.latitude,
     longitude: rakutenHotel.longitude,
+    // デバッグ用: 楽天APIから提供された元のURL（本番で一時的に使用、後で削除）
+    originalUrl: rakutenHotel.hotelInformationUrl,
   };
 }
 
