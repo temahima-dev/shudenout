@@ -81,15 +81,18 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
       order: '1' // 料金昇順
     });
 
+    // 東京都のプレフィックスコード（都道府県コード）を使用
+    searchParams.set('pref', '130000'); // 東京都
+    
     // エリア指定（座標優先、なければエリア名）
     if (params.lat && params.lng) {
       // 座標検索は使わず、近い地域名で検索
       const areaName = getAreaNameFromCoordinates(params.lat, params.lng);
       if (areaName) {
-        searchParams.set('area', areaName);
+        searchParams.set('s_area', areaName); // s_area パラメータを試す
       }
     } else if (params.area && AREA_MAP[params.area]) {
-      searchParams.set('area', AREA_MAP[params.area]);
+      searchParams.set('s_area', AREA_MAP[params.area]); // s_area パラメータを試す
     }
     
     // 価格範囲
@@ -100,7 +103,8 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
       searchParams.set('price_max', params.priceMax.toString());
     }
 
-    const url = `https://jws.jalan.net/APICommon/HotelSearch?${searchParams}`;
+    // まず標準のエンドポイントを試す
+    const url = `http://jws.jalan.net/APILite/HotelSearch/V1/?${searchParams}`;
     console.log('Jalan API URL:', url);
     console.log('Jalan API SearchParams:', Object.fromEntries(searchParams));
     
@@ -120,8 +124,10 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
     console.log('Jalan API response status:', response.status);
     console.log('Jalan API response:', JSON.stringify(data, null, 2));
     
-    const hotels = data?.Results?.Hotel || [];
+    // レスポンス構造を確認（APILiteの場合は構造が異なる可能性がある）
+    const hotels = data?.Results?.Hotel || data?.hotel || data?.Hotels || [];
     console.log('Jalan Hotels found:', hotels.length);
+    console.log('Raw hotels data:', hotels.slice(0, 2));
 
     return hotels.map((hotel: JalanHotel, index: number): NormalizedHotel => ({
       id: `jalan_${hotel.HotelName}_${index}`,
