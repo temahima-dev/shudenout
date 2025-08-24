@@ -274,7 +274,8 @@ function HomeContent() {
         apiParams,
         async () => {
           const response = await fetch(`${apiUrl}?${rakutenParams.toString()}`, {
-            signal: controller.signal
+            signal: controller.signal,
+            cache: 'no-store'
           });
           if (!response.ok) {
             throw new Error(`API Error: ${response.status}`);

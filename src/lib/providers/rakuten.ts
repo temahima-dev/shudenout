@@ -404,11 +404,14 @@ export async function getHotelDetail(hotelNo: number): Promise<Hotel | null> {
 }
 
 // エラー判定とフォールバック判定
+// isSample が true になる条件：APP_ID がない OR fetch 失敗時のみ true
 export function shouldUseFallback(): boolean {
-  return !process.env.RAKUTEN_APP_ID;
+  const APP_ID = process.env.RAKUTEN_APP_ID; // 関数内で毎回読む
+  return !APP_ID;
 }
 
 // 楽天APIが利用可能かチェック
 export function isRakutenApiAvailable(): boolean {
-  return !!process.env.RAKUTEN_APP_ID;
+  const APP_ID = process.env.RAKUTEN_APP_ID; // 関数内で毎回読む
+  return !!APP_ID;
 }

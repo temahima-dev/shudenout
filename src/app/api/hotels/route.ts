@@ -4,6 +4,7 @@ import { HOTELS } from "@/app/data/hotels";
 import { filterQualityHotels } from "@/lib/filters/quality";
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
@@ -64,9 +65,32 @@ export async function GET(request: NextRequest) {
     // 品質フィルターを適用
     const qualityFilteredItems = filterQualityHotels(rakutenResult.items);
     
-    return NextResponse.json({ hotels: qualityFilteredItems, success: true });
+    // デバッグ情報（本番のみ）
+    const debug = process.env.NODE_ENV === 'production' ? {
+      hasAppId: Boolean(process.env.RAKUTEN_APP_ID),
+      runtime: process.versions?.node ? 'node' : 'edge',
+      region: process.env.VERCEL_REGION ?? null,
+      ts: new Date().toISOString()
+    } : undefined;
+
+    return NextResponse.json(
+      { 
+        hotels: qualityFilteredItems, 
+        success: true,
+        ...(debug && { debug })
+      },
+      { 
+        headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' }
+      }
+    );
   } catch (error) {
     console.error("Hotels API error:", error);
-    return NextResponse.json({ hotels: [], success: false }, { status: 500 });
+    return NextResponse.json(
+      { hotels: [], success: false }, 
+      { 
+        status: 500,
+        headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' }
+      }
+    );
   }
 }

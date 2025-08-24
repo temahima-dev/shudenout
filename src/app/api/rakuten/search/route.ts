@@ -4,6 +4,7 @@ import { HOTELS } from "@/app/data/hotels";
 import { filterQualityHotels } from "@/lib/filters/quality";
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
@@ -82,6 +83,9 @@ export async function GET(request: NextRequest) {
           hasNext: endIndex < filteredHotels.length,
         },
         fallback: true,
+        isSample: true,
+      }, {
+        headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' }
       });
     }
 
@@ -159,6 +163,8 @@ export async function GET(request: NextRequest) {
         },
         fallback: true, // モックデータ使用中
         isSample: true, // UI表示用フラグ
+      }, {
+        headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' }
       });
     }
 
@@ -177,6 +183,8 @@ export async function GET(request: NextRequest) {
       },
       fallback: false,
       isSample: false, // 実際のAPIデータ
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' }
     });
 
   } catch (error) {
@@ -196,6 +204,8 @@ export async function GET(request: NextRequest) {
       fallback: true,
       isSample: true, // エラー時もサンプルデータ
       error: error instanceof Error ? error.message : "Unknown error",
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' }
     });
   }
 }
