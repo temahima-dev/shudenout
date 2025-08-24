@@ -16,17 +16,20 @@ export async function GET(request: NextRequest) {
     
     // URLパラメータを取得
     const area = searchParams.get("area") || undefined;
+    const lat = searchParams.get("lat") ? parseFloat(searchParams.get("lat")!) : undefined;
+    const lng = searchParams.get("lng") ? parseFloat(searchParams.get("lng")!) : undefined;
+    const radiusKm = searchParams.get("radiusKm") ? parseFloat(searchParams.get("radiusKm")!) : undefined;
     const minPrice = searchParams.get("minPrice") ? parseInt(searchParams.get("minPrice")!) : undefined;
     const maxPrice = searchParams.get("maxPrice") ? parseInt(searchParams.get("maxPrice")!) : undefined;
     const amenities = searchParams.get("amenities")?.split(",").filter(Boolean) || undefined;
     const page = searchParams.get("page") ? parseInt(searchParams.get("page")!) : 1;
     
     try {
-      // 楽天API検索
+      // 楽天API検索（座標パラメータを優先使用）
       const rakutenResult = await searchHotels({
-        lat: 35.6896, // デフォルト：新宿
-        lng: 139.6917,
-        radiusKm: 3.0,
+        lat: lat || 35.6896, // 指定座標またはデフォルト：新宿
+        lng: lng || 139.6917,
+        radiusKm: radiusKm || 3.0,
         page,
         hits: 30,
         minCharge: minPrice,

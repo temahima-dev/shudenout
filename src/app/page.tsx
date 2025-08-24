@@ -269,6 +269,13 @@ function HomeContent() {
       const apiUrl = `/api/rakuten/search`;
       const apiParams = Object.fromEntries(rakutenParams.entries());
       
+      // デバッグ用ログ（エリアフィルター問題解決のため）
+      console.log("🔍 API Request Debug:", {
+        areaFilter,
+        apiUrl: `${apiUrl}?${rakutenParams.toString()}`,
+        params: apiParams
+      });
+      
       const data = await apiOptimizer.deduplicateRequest(
         apiUrl,
         apiParams,
