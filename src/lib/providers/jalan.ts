@@ -64,6 +64,9 @@ function getAreaNameFromCoordinates(lat: number, lng: number): string | null {
 
 export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[]> {
   // APIキー未設定なら空配列
+  console.log('Jalan API Key exists:', !!process.env.JALAN_API_KEY);
+  console.log('Jalan API Key length:', process.env.JALAN_API_KEY?.length || 0);
+  
   if (!process.env.JALAN_API_KEY) {
     console.log('Jalan API key not set, skipping');
     return [];
@@ -99,6 +102,7 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
 
     const url = `https://jws.jalan.net/APICommon/HotelSearch?${searchParams}`;
     console.log('Jalan API URL:', url);
+    console.log('Jalan API SearchParams:', Object.fromEntries(searchParams));
     
     const response = await fetch(url, { 
       cache: 'no-store',
@@ -113,9 +117,11 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
     }
 
     const data = await response.json();
-    console.log('Jalan API response:', data);
+    console.log('Jalan API response status:', response.status);
+    console.log('Jalan API response:', JSON.stringify(data, null, 2));
     
     const hotels = data?.Results?.Hotel || [];
+    console.log('Jalan Hotels found:', hotels.length);
 
     return hotels.map((hotel: JalanHotel, index: number): NormalizedHotel => ({
       id: `jalan_${hotel.HotelName}_${index}`,
