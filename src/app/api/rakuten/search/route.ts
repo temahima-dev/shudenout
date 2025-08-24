@@ -132,36 +132,15 @@ export async function GET(request: NextRequest) {
     // 日付・人数情報はアフィリエイトURLに反映される
     console.log("楽天API SimpleHotelSearch を実行:", apiParams);
     
-    // じゃらんAPIのみでテスト（楽天API一時無効化）
-    const { searchJalan } = await import("@/lib/providers/jalan");
+    // 楽天APIを使用
+    console.log("楽天API SimpleHotelSearch を実行中...");
+    const result = await searchHotels(apiParams);
     
-    console.log("じゃらんAPIのみでテスト実行中...");
-    const jalanHotels = await searchJalan({
-      lat: apiParams.lat,
-      lng: apiParams.lng,
-      radiusKm: apiParams.radiusKm,
-      priceMin: apiParams.minCharge,
-      priceMax: apiParams.maxCharge,
-      page: apiParams.page,
-      hits: apiParams.hits
-    });
-    
-    console.log("じゃらんAPI結果件数:", jalanHotels.length);
-    console.log("じゃらんAPI結果詳細:", JSON.stringify(jalanHotels.slice(0, 3), null, 2));
-    
-    const result = {
-      items: jalanHotels,
-      paging: {
-        total: jalanHotels.length,
-        page: apiParams.page || 1,
-        totalPages: Math.ceil(jalanHotels.length / (apiParams.hits || 10)),
-        hasNext: jalanHotels.length > (apiParams.hits || 10)
-      }
-    };
+    console.log("楽天API結果件数:", result.items.length);
 
-    // じゃらんAPIの結果が空の場合はモックデータを使用
+    // 楽天APIの結果が空の場合はモックデータを使用
     if (result.items.length === 0) {
-      console.log("じゃらんAPI結果が空のため、モックデータを使用");
+      console.log("楽天API結果が空のため、モックデータを使用");
       const { HOTELS } = await import("@/app/data/hotels");
       const mockResult = {
         items: HOTELS.slice(0, 20),
