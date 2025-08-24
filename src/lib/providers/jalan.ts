@@ -34,6 +34,52 @@ const AREA_MAP: Record<string, string> = {
   roppongi: "六本木"
 };
 
+// 簡易XMLパーサー（じゃらんAPI専用）
+function parseJalanXML(xmlText: string): JalanHotel[] {
+  const hotels: JalanHotel[] = [];
+  
+  try {
+    // <Hotel>タグを抽出
+    const hotelMatches = xmlText.match(/<Hotel[^>]*>[\s\S]*?<\/Hotel>/g);
+    
+    if (!hotelMatches) {
+      console.log('No hotel matches found in XML');
+      return [];
+    }
+    
+    hotelMatches.forEach((hotelXml) => {
+      const hotel: Partial<JalanHotel> = {};
+      
+      // 各フィールドを抽出
+      const extractValue = (fieldName: string): string => {
+        const regex = new RegExp(`<${fieldName}[^>]*>(.*?)<\/${fieldName}>`, 'i');
+        const match = hotelXml.match(regex);
+        return match ? match[1] : '';
+      };
+      
+      hotel.HotelName = extractValue('HotelName');
+      hotel.SmallArea = extractValue('SmallArea');
+      hotel.NearStation = extractValue('NearStation');
+      hotel.HotelMinCharge = parseInt(extractValue('HotelMinCharge')) || 0;
+      hotel.PictureUrl = extractValue('PictureUrl');
+      hotel.SalesformUrl = extractValue('SalesformUrl');
+      hotel.CustomerEvaluationAverage = parseFloat(extractValue('CustomerEvaluationAverage')) || undefined;
+      hotel.X = parseFloat(extractValue('X')) || undefined;
+      hotel.Y = parseFloat(extractValue('Y')) || undefined;
+      
+      if (hotel.HotelName) {
+        hotels.push(hotel as JalanHotel);
+      }
+    });
+    
+    console.log(`Parsed ${hotels.length} hotels from XML`);
+    return hotels;
+  } catch (error) {
+    console.error('XML parsing error:', error);
+    return [];
+  }
+}
+
 // 座標からエリア名を推定
 function getAreaNameFromCoordinates(lat: number, lng: number): string | null {
   const areas = [
@@ -75,8 +121,8 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
   try {
     const searchParams = new URLSearchParams({
       key: process.env.JALAN_API_KEY,
-      format: 'json',
-      count: Math.min(params.hits || 30, 100).toString(), // じゃらんAPIの上限は100
+      xml_ptn: '1', // XMLパターン1（基本情報）
+      count: Math.min(params.hits || 30, 50).toString(), // じゃらんAPILiteの上限は50
       start: (((params.page || 1) - 1) * (params.hits || 30) + 1).toString(),
       order: '1' // 料金昇順
     });
@@ -84,16 +130,9 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
     // 東京都のプレフィックスコード（都道府県コード）を使用
     searchParams.set('pref', '130000'); // 東京都
     
-    // エリア指定（座標優先、なければエリア名）
-    if (params.lat && params.lng) {
-      // 座標検索は使わず、近い地域名で検索
-      const areaName = getAreaNameFromCoordinates(params.lat, params.lng);
-      if (areaName) {
-        searchParams.set('s_area', areaName); // s_area パラメータを試す
-      }
-    } else if (params.area && AREA_MAP[params.area]) {
-      searchParams.set('s_area', AREA_MAP[params.area]); // s_area パラメータを試す
-    }
+    // 新宿エリアコードを試す（例として）
+    searchParams.set('l_area', '137100'); // 東京23区
+    searchParams.set('s_area', '137102'); // 新宿・代々木
     
     // 価格範囲
     if (params.priceMin) {
@@ -120,14 +159,14 @@ export async function searchJalan(params: JalanParams): Promise<NormalizedHotel[
       return [];
     }
 
-    const data = await response.json();
+    const xmlText = await response.text();
     console.log('Jalan API response status:', response.status);
-    console.log('Jalan API response:', JSON.stringify(data, null, 2));
+    console.log('Jalan API XML response:', xmlText.substring(0, 500), '...');
     
-    // レスポンス構造を確認（APILiteの場合は構造が異なる可能性がある）
-    const hotels = data?.Results?.Hotel || data?.hotel || data?.Hotels || [];
+    // XMLをパースする（簡易的なパーサー）
+    const hotels = parseJalanXML(xmlText);
     console.log('Jalan Hotels found:', hotels.length);
-    console.log('Raw hotels data:', hotels.slice(0, 2));
+    console.log('Parsed hotels data:', hotels.slice(0, 2));
 
     return hotels.map((hotel: JalanHotel, index: number): NormalizedHotel => ({
       id: `jalan_${hotel.HotelName}_${index}`,
