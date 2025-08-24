@@ -1,65 +1,115 @@
-export function withUtm(rawUrl: string, utm: Record<string, string>): string {
+// 楽天ホテルリンクの安全性チェック
+
+const ALLOWED_DOMAINS = [
+  'travel.rakuten.co.jp',          // 楽天トラベル本体
+  'hb.afl.rakuten.co.jp',          // 楽天アフィリエイト中継
+  // 'img.travel.rakuten.co.jp',   // 画像API（将来拡張用、現在は対象外）
+];
+
+/**
+ * 楽天ホテルリンクの安全性をチェックし、許可ドメイン以外は修正する
+ * @param url チェック対象のURL
+ * @param fallbackHotelNo フォールバック用のホテル番号（任意）
+ * @returns 安全なURL、または空文字
+ */
+export function safeHotelLink(url: string, fallbackHotelNo?: number): string {
+  if (!url || url.trim() === '') {
+    return '';
+  }
+
   try {
-    // 相対URLの場合はベースURLを使用
-    const baseUrl = rawUrl.startsWith('http') ? undefined : 'http://localhost:3000';
-    const url = new URL(rawUrl, baseUrl);
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.toLowerCase();
     
-    // ハッシュを一時的に保存
-    const hash = url.hash;
-    url.hash = '';
+    // 許可ドメインのチェック
+    const isAllowed = ALLOWED_DOMAINS.some(domain => 
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
     
-    // UTMパラメータを追加
-    Object.entries(utm).forEach(([key, value]) => {
-      url.searchParams.set(key, value);
-    });
+    if (isAllowed) {
+      return url; // 許可ドメインなのでそのまま返す
+    }
     
-    // ハッシュを復元
-    url.hash = hash;
+    // 許可ドメイン以外（楽天市場等）の場合、楽天トラベルURLにフォールバック
+    console.warn(`⚠️ 非許可ドメインを検出: ${hostname}, 楽天トラベルにフォールバック`);
     
-    return url.toString();
+    if (fallbackHotelNo) {
+      // ホテル番号があれば楽天トラベルの正規URLを生成
+      return `https://travel.rakuten.co.jp/HOTEL/${fallbackHotelNo}/${fallbackHotelNo}.html`;
+    }
+    
+    // フォールバックできない場合は空文字
+    return '';
+    
   } catch (error) {
-    console.error('URL parsing error:', error);
-    return rawUrl; // エラー時は元のURLを返す
+    console.error('URL解析エラー:', error);
+    return '';
   }
 }
 
-// 日付・人数情報を楽天アフィリエイトURLに追加
-export function withBookingParams(
-  rawUrl: string, 
-  params: {
-    checkinDate?: string;
-    checkoutDate?: string;
-    adultNum?: number;
-    utm?: Record<string, string>;
-  }
-): string {
+/**
+ * 予約用パラメータを URL に追加する
+ */
+export interface BookingParams {
+  checkinDate?: string;
+  checkoutDate?: string;
+  adultNum?: number;
+  utm?: {
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
+  };
+}
+
+export function withBookingParams(baseUrl: string, params: BookingParams): string {
   try {
-    const url = new URL(rawUrl);
+    const url = new URL(baseUrl);
     
-    // 楽天トラベルのパラメータを追加
     if (params.checkinDate) {
-      url.searchParams.set('checkin_date', params.checkinDate);
+      url.searchParams.set('checkin', params.checkinDate);
     }
     if (params.checkoutDate) {
-      url.searchParams.set('checkout_date', params.checkoutDate);
+      url.searchParams.set('checkout', params.checkoutDate);
     }
-    if (params.adultNum && params.adultNum > 1) {
-      url.searchParams.set('adult_num', params.adultNum.toString());
+    if (params.adultNum) {
+      url.searchParams.set('adults', params.adultNum.toString());
     }
     
-    // UTMパラメータを追加
+    // UTMパラメータ追加
     if (params.utm) {
-      Object.entries(params.utm).forEach(([key, value]) => {
-        url.searchParams.set(key, value);
-      });
+      if (params.utm.utm_source) url.searchParams.set('utm_source', params.utm.utm_source);
+      if (params.utm.utm_medium) url.searchParams.set('utm_medium', params.utm.utm_medium);
+      if (params.utm.utm_campaign) url.searchParams.set('utm_campaign', params.utm.utm_campaign);
     }
     
     return url.toString();
   } catch (error) {
-    console.error('URL parsing error:', error);
-    return rawUrl;
+    console.error('URL生成エラー:', error);
+    return baseUrl;
   }
 }
 
-// アフィリエイトリンクはサーバーサイドで生成済みのため、
-// withAffiliate関数は削除（rakuten.ts で処理）
+/**
+ * デバッグ用：最終的なhrefサンプルを生成（withAffiliate + withUtm + safeHotelLink適用後）
+ */
+export function createFinalHrefSample(
+  baseUrl: string, 
+  hotelNo: number,
+  checkinDate?: string,
+  checkoutDate?: string,
+  adultNum?: number
+): string {
+  // withBookingParams相当の処理
+  const finalUrl = withBookingParams(baseUrl, {
+    checkinDate,
+    checkoutDate,
+    adultNum,
+    utm: {
+      utm_source: 'shudenout',
+      utm_medium: 'affiliate'
+    }
+  });
+  
+  // 最終安全性チェック
+  return safeHotelLink(finalUrl, hotelNo);
+}

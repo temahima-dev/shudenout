@@ -14,6 +14,16 @@ export interface Hotel {
   // 計算された距離情報
   distanceKm?: number;
   walkingTimeMinutes?: number;
+  // デバッグ用（debugLinks=1の時のみ）
+  debugInfo?: {
+    fromApi: {
+      hotelAffiliateUrl?: string;
+      hotelInformationUrl?: string;
+      planListUrl?: string;
+    };
+    afterNormalize: string;
+    finalHrefSample: string;
+  };
 }
 
 export const HOTELS: Hotel[] = [

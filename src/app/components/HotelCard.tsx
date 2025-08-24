@@ -1,7 +1,7 @@
 "use client";
 
 import { type Hotel } from "@/app/data/hotels";
-import { withBookingParams } from "@/lib/url";
+import { withBookingParams, safeHotelLink } from "@/lib/url";
 import { formatDistance, formatWalkingTime } from "@/lib/geolocation";
 import { trackHotelBooking } from "@/lib/analytics";
 import LazyImage from "./LazyImage";
@@ -36,7 +36,12 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
         utm_medium: 'affiliate'
       }
     });
-    window.open(urlWithParams, "_blank", "noopener,noreferrer");
+    
+    // 最終安全性チェック（許可ドメイン以外は修正）
+    const hotelNo = hotel.id.replace('rakuten_', '');
+    const safeUrl = safeHotelLink(urlWithParams, parseInt(hotelNo));
+    
+    window.open(safeUrl, "_blank", "noopener,noreferrer");
   };
 
   // 評価表示用のスター

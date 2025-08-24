@@ -1,5 +1,6 @@
 import 'server-only';
 import { Hotel } from "@/app/data/hotels";
+import { safeHotelLink, createFinalHrefSample } from "@/lib/url";
 
 // APIベースURL
 const BASE_URL = "https://app.rakuten.co.jp/services/api/Travel";
@@ -24,6 +25,7 @@ interface SearchParams {
   smallClassCode?: string;
   detailClassCode?: string;
   sort?: "standard" | "+roomCharge" | "-roomCharge";
+  withDebug?: boolean;
 }
 
 interface RakutenHotel {
@@ -33,6 +35,8 @@ interface RakutenHotel {
   planListUrl: string;
   dpPlanListUrl: string;
   reviewUrl: string;
+  // 楽天APIから提供される可能性のあるアフィリエイトURL関連フィールド
+  hotelAffiliateUrl?: string;
   hotelKanaName: string;
   hotelSpecial: string;
   hotelMinCharge: number;
@@ -127,19 +131,35 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
 }
 
 // 楽天ホテルデータをアプリのHotel型にマッピング
-function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
+function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false): Hotel {
   // エリアを住所から抽出
   const area = extractAreaFromAddress(rakutenHotel.address1);
   
   // 設備情報（楽天APIからは詳細取得が必要なため、デフォルト設定）
   const amenities: Array<"シャワー" | "WiFi" | "2人可"> = ["WiFi"];
   
-  // 楽天トラベルの正しいアフィリエイトURL生成
-  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
-  const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-  const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
+  // リンク採用ポリシーの固定化
+  let affiliateUrl = '';
   
-  return {
+  // 1. APIからhotelAffiliateUrlが来ていれば最優先で採用（既にトラッキング済み）
+  if (rakutenHotel.hotelAffiliateUrl) {
+    affiliateUrl = rakutenHotel.hotelAffiliateUrl;
+  }
+  // 2. なければhotelInformationUrlにRAKUTEN_AFFILIATE_IDを付与してアフィ化
+  else if (rakutenHotel.hotelInformationUrl) {
+    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+    const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+    affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
+  }
+  // 3. どちらもなければ非アフィの情報URL
+  else {
+    affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+  }
+  
+  // 最終安全性チェック（許可ドメイン以外は修正）
+  affiliateUrl = safeHotelLink(affiliateUrl, rakutenHotel.hotelNo);
+  
+  const hotel: Hotel = {
     id: `rakuten_${rakutenHotel.hotelNo}`,
     name: rakutenHotel.hotelName,
     area,
@@ -152,6 +172,29 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
     latitude: rakutenHotel.latitude,
     longitude: rakutenHotel.longitude,
   };
+  
+  // デバッグ情報の追加（debugLinks=1の時のみ）
+  if (withDebug) {
+    const finalHrefSample = createFinalHrefSample(
+      affiliateUrl, 
+      rakutenHotel.hotelNo,
+      new Date().toISOString().split('T')[0], // 今日
+      new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0], // 明日
+      2 // 2名
+    );
+    
+    hotel.debugInfo = {
+      fromApi: {
+        hotelAffiliateUrl: rakutenHotel.hotelAffiliateUrl,
+        hotelInformationUrl: rakutenHotel.hotelInformationUrl,
+        planListUrl: rakutenHotel.planListUrl,
+      },
+      afterNormalize: affiliateUrl,
+      finalHrefSample: finalHrefSample,
+    };
+  }
+  
+  return hotel;
 }
 
 // 住所からエリア（区）を抽出
@@ -255,7 +298,7 @@ export async function searchHotels(searchParams: SearchParams): Promise<SearchRe
     
     const hotels = data.hotels.map((hotelData) => {
       const hotel = hotelData[0].hotelBasicInfo;
-      return mapRakutenToHotel(hotel);
+      return mapRakutenToHotel(hotel, searchParams.withDebug);
     });
     
     return {
@@ -355,7 +398,7 @@ export async function searchVacancy(searchParams: SearchParams): Promise<SearchR
     
     const hotels = data.hotels.map((hotelData) => {
       const hotel = hotelData[0].hotelBasicInfo;
-      return mapRakutenToHotel(hotel);
+      return mapRakutenToHotel(hotel, searchParams.withDebug);
     });
     
     return {
@@ -397,7 +440,7 @@ export async function getHotelDetail(hotelNo: number): Promise<Hotel | null> {
     }
     
     const hotel = data.hotels[0].hotel[0];
-    return mapRakutenToHotel(hotel);
+    return mapRakutenToHotel(hotel, false); // HotelDetailSearchではデバッグ不要
     
   } catch (error) {
     console.error("楽天API HotelDetailSearch 呼び出しエラー:", error);

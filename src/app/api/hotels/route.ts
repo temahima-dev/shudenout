@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
+    // デバッグリンク機能（debugLinks=1の時のみ）
+    const debugLinks = searchParams.get("debugLinks") === "1";
+    
     // URLパラメータを取得
     const area = searchParams.get("area") || undefined;
     const lat = searchParams.get("lat") ? parseFloat(searchParams.get("lat")!) : undefined;
@@ -34,7 +37,8 @@ export async function GET(request: NextRequest) {
         hits: 30,
         minCharge: minPrice,
         maxCharge: maxPrice,
-        sort: "+roomCharge" as "+roomCharge"
+        sort: "+roomCharge" as "+roomCharge",
+        withDebug: debugLinks // デバッグフラグを渡す
       });
       
       rakutenStatus = 200; // searchHotels が成功した場合
@@ -109,17 +113,20 @@ export async function GET(request: NextRequest) {
         ts: new Date().toISOString()
       } : undefined;
 
-      return NextResponse.json(
-        { 
-          hotels: qualityFilteredItems, 
-          success: true,
-          isSample: false, // fetch 成功時は false
-          ...(debug && { debug })
-        },
-        { 
-          headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' }
-        }
-      );
+              return NextResponse.json(
+          { 
+            hotels: qualityFilteredItems, 
+            success: true,
+            isSample: false, // fetch 成功時は false
+            ...(debug && { debug })
+          },
+          { 
+            headers: { 
+              'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate',
+              'Content-Type': 'application/json'
+            }
+          }
+        );
       
     } catch (rakutenError) {
       // 楽天API fetch 失敗時のみ isSample=true
