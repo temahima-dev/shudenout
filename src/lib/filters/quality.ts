@@ -42,15 +42,15 @@ function normalizeText(text: string): string {
  * @returns 品質基準を満たす場合true
  */
 export function isQualityHotel(hotel: Hotel): boolean {
-  // 1. 価格チェック: 4000円以上
-  if (hotel.price < 4000) {
-    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: 価格が4000円未満 - ${hotel.price}円)`);
+  // 1. 価格チェック: 3000円以上（終電後ホテルとして妥当な価格帯）
+  if (hotel.price < 3000) {
+    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: 価格が3000円未満 - ${hotel.price}円)`);
     return false;
   }
 
-  // 2. 評価チェック: 4.0以上（星4以上）
-  if (hotel.rating && hotel.rating < 4.0) {
-    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: 評価が4.0未満 - ${hotel.rating})`);
+  // 2. 評価チェック: 3.5以上（評価なしは通す）
+  if (hotel.rating && hotel.rating < 3.5) {
+    // console.log(`🚫 品質フィルターで除外: "${hotel.name}" (理由: 評価が3.5未満 - ${hotel.rating})`);
     return false;
   }
 
