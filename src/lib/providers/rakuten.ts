@@ -134,8 +134,12 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
   // 設備情報（楽天APIからは詳細取得が必要なため、デフォルト設定）
   const amenities: Array<"シャワー" | "WiFi" | "2人可"> = ["WiFi"];
   
-  // アフィリエイトURLが設定されている場合はそのまま使用
-  const affiliateUrl = rakutenHotel.hotelInformationUrl;
+  // 楽天トラベルの正しいアフィリエイトURL生成
+  const APP_ID = process.env.RAKUTEN_APP_ID;
+  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+  
+  // 楽天トラベルのアフィリエイトURL（ホテル詳細＆予約ページ）
+  const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=https%3A%2F%2Fimg.travel.rakuten.co.jp%2Fimage%2Ftr%2Fapi%2Fhs%2FdQ4dX%2F%3Ff_no%3D${rakutenHotel.hotelNo}`;
   
   return {
     id: `rakuten_${rakutenHotel.hotelNo}`,
