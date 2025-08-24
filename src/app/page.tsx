@@ -52,7 +52,7 @@ function HomeContent() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [usingFallback, setUsingFallback] = useState<boolean>(false);
+  const [isSampleData, setIsSampleData] = useState<boolean>(false);
 
   // URLからの状態復元
   useEffect(() => {
@@ -198,7 +198,7 @@ function HomeContent() {
     if (cachedResult) {
       console.log('🚀 キャッシュから検索結果を取得');
       setHotels(cachedResult.items);
-      setUsingFallback(cachedResult.fallback);
+      setIsSampleData(cachedResult.isSample || cachedResult.fallback || false);
       setLoading(false);
       setAbortController(null);
       return;
@@ -323,7 +323,7 @@ function HomeContent() {
         }
         
         setHotels(filteredItems);
-        setUsingFallback(data.fallback || false);
+        setIsSampleData(data.isSample || data.fallback || false);
         
         // アナリティクス追跡
         trackHotelSearch({
@@ -348,7 +348,7 @@ function HomeContent() {
         cacheManager.setSearchResults(cacheParams, cacheData);
       } else {
         setHotels([]);
-        setUsingFallback(false);
+        setIsSampleData(false);
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -776,11 +776,11 @@ function HomeContent() {
           <p className="text-gray-600">
             {displayedHotels.length}件表示中 / {filteredHotels.length}件が見つかりました
           </p>
-          {usingFallback && (
+          {isSampleData && (
             <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
               <p className="text-sm text-yellow-800">
                 📄 楽天APIが利用できないため、サンプルデータを表示しています。
-                実際のデータを表示するには、<code className="bg-yellow-100 px-1 rounded">.env.local</code>にRAKUTEN_APP_IDを設定してください。
+                実際のデータを表示するには、Vercel環境変数にRAKUTEN_APP_IDを設定してください。
               </p>
             </div>
           )}

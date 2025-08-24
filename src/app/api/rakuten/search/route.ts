@@ -3,6 +3,8 @@ import { searchHotels, searchVacancy, shouldUseFallback } from "@/lib/providers/
 import { HOTELS } from "@/app/data/hotels";
 import { filterQualityHotels } from "@/lib/filters/quality";
 
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -156,6 +158,7 @@ export async function GET(request: NextRequest) {
           total: qualityFilteredItems.length
         },
         fallback: true, // モックデータ使用中
+        isSample: true, // UI表示用フラグ
       });
     }
 
@@ -173,6 +176,7 @@ export async function GET(request: NextRequest) {
         hasNext: qualityFilteredItems.length > (result.paging.totalPages > 0 ? result.items.length / result.paging.totalPages : 30),
       },
       fallback: false,
+      isSample: false, // 実際のAPIデータ
     });
 
   } catch (error) {
@@ -190,6 +194,7 @@ export async function GET(request: NextRequest) {
         hasNext: HOTELS.length > 6,
       },
       fallback: true,
+      isSample: true, // エラー時もサンプルデータ
       error: error instanceof Error ? error.message : "Unknown error",
     });
   }

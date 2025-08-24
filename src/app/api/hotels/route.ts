@@ -3,6 +3,8 @@ import { searchHotels } from "@/lib/providers/rakuten";
 import { HOTELS } from "@/app/data/hotels";
 import { filterQualityHotels } from "@/lib/filters/quality";
 
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

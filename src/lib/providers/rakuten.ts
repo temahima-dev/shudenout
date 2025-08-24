@@ -1,8 +1,5 @@
+import 'server-only';
 import { Hotel } from "@/app/data/hotels";
-
-// 楽天API設定
-const APP_ID = process.env.RAKUTEN_APP_ID;
-const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
 
 // APIベースURL
 const BASE_URL = "https://app.rakuten.co.jp/services/api/Travel";
@@ -168,6 +165,9 @@ function clampValue(value: number, min: number, max: number): number {
 
 // 共通のクエリパラメータを生成
 function buildCommonParams(): URLSearchParams {
+  const APP_ID = process.env.RAKUTEN_APP_ID;
+  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
+  
   if (!APP_ID) {
     throw new Error("RAKUTEN_APP_ID missing in environment variables");
   }
@@ -405,10 +405,10 @@ export async function getHotelDetail(hotelNo: number): Promise<Hotel | null> {
 
 // エラー判定とフォールバック判定
 export function shouldUseFallback(): boolean {
-  return !APP_ID;
+  return !process.env.RAKUTEN_APP_ID;
 }
 
 // 楽天APIが利用可能かチェック
 export function isRakutenApiAvailable(): boolean {
-  return !!APP_ID;
+  return !!process.env.RAKUTEN_APP_ID;
 }
