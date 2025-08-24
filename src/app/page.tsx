@@ -777,14 +777,14 @@ function HomeContent() {
           <p className="text-gray-600">
             {displayedHotels.length}件表示中 / {filteredHotels.length}件が見つかりました
           </p>
-          {isSampleData && (
-            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-              <p className="text-sm text-yellow-800">
-                📄 楽天APIが利用できないため、サンプルデータを表示しています。
-                実際のデータを表示するには、Vercel環境変数にRAKUTEN_APP_IDを設定してください。
-              </p>
-            </div>
-          )}
+                      {isSampleData && (
+              <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <p className="text-sm text-yellow-800">
+                  📄 楽天APIが失敗したため、サンプルデータを表示しています。
+                  実際のデータを表示するには、API接続を確認してください。
+                </p>
+              </div>
+            )}
         </div>
 
         {/* ホテル一覧 */}
