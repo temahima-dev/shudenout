@@ -533,7 +533,8 @@ function HomeContent() {
             <p className="text-sm text-gray-600 mb-4">
               希望の日付・人数を指定してホテルを検索できます。空室状況は各予約サイトでご確認ください。
             </p>
-            <div className="grid grid-cols-1 gap-4">
+            {/* モバイル: 1列、デスクトップ: 3列レイアウト */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* チェックイン日 */}
               <div>
                 {/* デスクトップ表示: 見出しを上に配置 */}
@@ -545,7 +546,7 @@ function HomeContent() {
                   <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     IN
                   </label>
-                  <div className="relative flex-1">
+                  <div className="relative max-w-xs">
                     <input
                       id="checkin-mobile"
                       type="date"
@@ -588,7 +589,7 @@ function HomeContent() {
                   <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     OUT
                   </label>
-                  <div className="relative flex-1">
+                  <div className="relative max-w-xs">
                     <input
                       id="checkout-mobile"
                       type="date"
@@ -634,7 +635,7 @@ function HomeContent() {
                   <select
                     value={adultNum}
                     onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
-                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
+                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
                   >
                     <option value={2}>2人</option>
                     <option value={1}>1人</option>
