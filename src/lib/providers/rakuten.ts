@@ -134,27 +134,10 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
   // 設備情報（楽天APIからは詳細取得が必要なため、デフォルト設定）
   const amenities: Array<"シャワー" | "WiFi" | "2人可"> = ["WiFi"];
   
-  // 楽天APIから提供されるURL群をデバッグログ出力
-  console.log("🔍 楽天API URL Debug:", {
-    hotelNo: rakutenHotel.hotelNo,
-    hotelName: rakutenHotel.hotelName,
-    hotelInformationUrl: rakutenHotel.hotelInformationUrl,
-    planListUrl: rakutenHotel.planListUrl,
-    dpPlanListUrl: rakutenHotel.dpPlanListUrl
-  });
-
-  // 楽天APIのhotelInformationUrlは画像APIなので使用せず、
-  // 正しい楽天トラベルのホテル詳細・予約ページURLを生成
-  // 一時的にテスト用デフォルトIDを使用（楽天公式のサンプルID）
-  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "17b592bd.218bc1d1.17b592be.70a9cb04";
+  // 楽天トラベルの正しいアフィリエイトURL生成
+  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
   const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
   const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
-  
-  console.log("✅ 正しい楽天トラベルURL生成:", {
-    hotelNo: rakutenHotel.hotelNo,
-    directUrl: travelUrl,
-    affiliateUrl: affiliateUrl
-  });
   
   return {
     id: `rakuten_${rakutenHotel.hotelNo}`,
@@ -168,8 +151,6 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
     rating: rakutenHotel.reviewAverage > 0 ? rakutenHotel.reviewAverage : undefined,
     latitude: rakutenHotel.latitude,
     longitude: rakutenHotel.longitude,
-    // デバッグ用: 楽天APIから提供された元のURL（本番で一時的に使用、後で削除）
-    originalUrl: rakutenHotel.hotelInformationUrl,
   };
 }
 
@@ -189,14 +170,6 @@ function buildCommonParams(): URLSearchParams {
   const APP_ID = process.env.RAKUTEN_APP_ID;
   const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
   
-  // 環境変数デバッグログ（本番用、後で削除）
-  console.log("🔧 環境変数Debug:", {
-    hasAppId: Boolean(APP_ID),
-    hasAffId: Boolean(AFF_ID),
-    appIdMasked: APP_ID ? `${APP_ID.substring(0, 3)}...${APP_ID.substring(APP_ID.length - 2)}` : 'undefined',
-    affIdMasked: AFF_ID ? `${AFF_ID.substring(0, 8)}...${AFF_ID.substring(AFF_ID.length - 8)}` : 'undefined'
-  });
-  
   if (!APP_ID) {
     throw new Error("RAKUTEN_APP_ID missing in environment variables");
   }
@@ -208,9 +181,9 @@ function buildCommonParams(): URLSearchParams {
     datumType: "1", // WGS84・度
   });
   
-  // アフィリエイトIDをAPIリクエストに追加（楽天公式のサンプルIDをフォールバック）
-  const finalAffId = AFF_ID || "17b592bd.218bc1d1.17b592be.70a9cb04";
-  params.set("affiliateId", finalAffId);
+  if (AFF_ID) {
+    params.set("affiliateId", AFF_ID);
+  }
   
   return params;
 }
