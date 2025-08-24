@@ -145,7 +145,8 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
 
   // 楽天APIのhotelInformationUrlは画像APIなので使用せず、
   // 正しい楽天トラベルのホテル詳細・予約ページURLを生成
-  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+  // 一時的にテスト用デフォルトIDを使用（楽天公式のサンプルID）
+  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "17b592bd.218bc1d1.17b592be.70a9cb04";
   const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
   const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
   
@@ -207,9 +208,9 @@ function buildCommonParams(): URLSearchParams {
     datumType: "1", // WGS84・度
   });
   
-  if (AFF_ID) {
-    params.set("affiliateId", AFF_ID);
-  }
+  // アフィリエイトIDをAPIリクエストに追加（楽天公式のサンプルIDをフォールバック）
+  const finalAffId = AFF_ID || "17b592bd.218bc1d1.17b592be.70a9cb04";
+  params.set("affiliateId", finalAffId);
   
   return params;
 }
