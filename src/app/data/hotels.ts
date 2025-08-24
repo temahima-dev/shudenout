@@ -52,10 +52,10 @@ export const HOTELS: Hotel[] = [
   },
   {
     id: "hotel_4",
-    name: "上野サウナ&ホテル",
+    name: "上野プレミアムホテル",
     area: "台東区",
     nearest: "上野駅",
-    price: 3800,
+    price: 4200,
     amenities: ["WiFi", "シャワー"],
     imageUrl: "https://picsum.photos/seed/ueno/1200/800",
     affiliateUrl: "https://example.com/hotel4",
@@ -81,7 +81,7 @@ export const HOTELS: Hotel[] = [
     amenities: ["WiFi"],
     imageUrl: "https://picsum.photos/seed/shibuya2/1200/800",
     affiliateUrl: "https://example.com/hotel6",
-    rating: 3.9
+    rating: 4.0
   },
   {
     id: "hotel_7",
@@ -114,7 +114,7 @@ export const HOTELS: Hotel[] = [
     amenities: ["WiFi", "シャワー"],
     imageUrl: "https://picsum.photos/seed/ikebukuro2/1200/800",
     affiliateUrl: "https://example.com/hotel9",
-    rating: 3.8
+    rating: 4.0
   },
   {
     id: "hotel_10",
@@ -147,7 +147,7 @@ export const HOTELS: Hotel[] = [
     amenities: ["WiFi", "シャワー"],
     imageUrl: "https://picsum.photos/seed/akihabara/1200/800",
     affiliateUrl: "https://example.com/hotel12",
-    rating: 3.9
+    rating: 4.0
   },
   {
     id: "hotel_13",
@@ -213,7 +213,7 @@ export const HOTELS: Hotel[] = [
     amenities: ["WiFi", "シャワー"],
     imageUrl: "https://picsum.photos/seed/kanda/1200/800",
     affiliateUrl: "https://example.com/hotel18",
-    rating: 3.7
+    rating: 4.0
   },
   {
     id: "hotel_19",
