@@ -545,22 +545,36 @@ function HomeContent() {
                   <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     IN
                   </label>
+                  <div className="relative flex-1">
+                    <input
+                      id="checkin-mobile"
+                      type="date"
+                      value={checkinDate}
+                      min={getTodayString()}
+                      onChange={(e) => handleCheckinDateChange(e.target.value)}
+                      className="w-full p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer"
+                    />
+                    <div 
+                      className="absolute inset-0 cursor-pointer rounded-lg"
+                      onClick={() => document.getElementById('checkin-mobile')?.focus()}
+                    />
+                  </div>
+                </div>
+                {/* デスクトップ表示: 通常の入力フィールド */}
+                <div className="hidden sm:block relative">
                   <input
+                    id="checkin-desktop"
                     type="date"
                     value={checkinDate}
                     min={getTodayString()}
                     onChange={(e) => handleCheckinDateChange(e.target.value)}
-                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer"
+                  />
+                  <div 
+                    className="absolute inset-0 cursor-pointer rounded-lg"
+                    onClick={() => document.getElementById('checkin-desktop')?.focus()}
                   />
                 </div>
-                {/* デスクトップ表示: 通常の入力フィールド */}
-                <input
-                  type="date"
-                  value={checkinDate}
-                  min={getTodayString()}
-                  onChange={(e) => handleCheckinDateChange(e.target.value)}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
-                />
               </div>
 
               {/* チェックアウト日 */}
@@ -574,22 +588,36 @@ function HomeContent() {
                   <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
                     OUT
                   </label>
+                  <div className="relative flex-1">
+                    <input
+                      id="checkout-mobile"
+                      type="date"
+                      value={checkoutDate}
+                      min={checkinDate}
+                      onChange={(e) => handleCheckoutDateChange(e.target.value)}
+                      className="w-full p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer"
+                    />
+                    <div 
+                      className="absolute inset-0 cursor-pointer rounded-lg"
+                      onClick={() => document.getElementById('checkout-mobile')?.focus()}
+                    />
+                  </div>
+                </div>
+                {/* デスクトップ表示: 通常の入力フィールド */}
+                <div className="hidden sm:block relative">
                   <input
+                    id="checkout-desktop"
                     type="date"
                     value={checkoutDate}
                     min={checkinDate}
                     onChange={(e) => handleCheckoutDateChange(e.target.value)}
-                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer"
+                  />
+                  <div 
+                    className="absolute inset-0 cursor-pointer rounded-lg"
+                    onClick={() => document.getElementById('checkout-desktop')?.focus()}
                   />
                 </div>
-                {/* デスクトップ表示: 通常の入力フィールド */}
-                <input
-                  type="date"
-                  value={checkoutDate}
-                  min={checkinDate}
-                  onChange={(e) => handleCheckoutDateChange(e.target.value)}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
-                />
               </div>
 
               {/* 人数 */}
