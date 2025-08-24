@@ -134,13 +134,32 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
   // 設備情報（楽天APIからは詳細取得が必要なため、デフォルト設定）
   const amenities: Array<"シャワー" | "WiFi" | "2人可"> = ["WiFi"];
   
-  // 楽天トラベルの正しいアフィリエイトURL生成
-  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+  // 楽天APIから提供されるURL群をデバッグログ出力
+  console.log("🔍 楽天API URL Debug:", {
+    hotelNo: rakutenHotel.hotelNo,
+    hotelName: rakutenHotel.hotelName,
+    hotelInformationUrl: rakutenHotel.hotelInformationUrl,
+    planListUrl: rakutenHotel.planListUrl,
+    dpPlanListUrl: rakutenHotel.dpPlanListUrl
+  });
+
+  // 楽天APIが提供するアフィリエイトURLを優先使用
+  let affiliateUrl = rakutenHotel.hotelInformationUrl;
   
-  // 楽天トラベルのホテル詳細・予約ページへの直接リンク
-  // ※楽天トラベルの正しいURL構造に修正
-  const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-  const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
+  // 楽天APIのURLが楽天市場URLの場合は楽天トラベルURLに修正
+  if (affiliateUrl && affiliateUrl.includes('item.rakuten.co.jp')) {
+    console.log("⚠️ 楽天市場URLを検出、楽天トラベルURLに修正:", affiliateUrl);
+    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+    const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+    affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
+  } else if (!affiliateUrl || affiliateUrl === '') {
+    console.log("⚠️ アフィリエイトURLが空、楽天トラベルURLを生成");
+    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+    const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+    affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
+  }
+  
+  console.log("✅ 最終アフィリエイトURL:", affiliateUrl);
   
   return {
     id: `rakuten_${rakutenHotel.hotelNo}`,
@@ -172,6 +191,14 @@ function clampValue(value: number, min: number, max: number): number {
 function buildCommonParams(): URLSearchParams {
   const APP_ID = process.env.RAKUTEN_APP_ID;
   const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
+  
+  // 環境変数デバッグログ（本番用、後で削除）
+  console.log("🔧 環境変数Debug:", {
+    hasAppId: Boolean(APP_ID),
+    hasAffId: Boolean(AFF_ID),
+    appIdMasked: APP_ID ? `${APP_ID.substring(0, 3)}...${APP_ID.substring(APP_ID.length - 2)}` : 'undefined',
+    affIdMasked: AFF_ID ? `${AFF_ID.substring(0, 8)}...${AFF_ID.substring(AFF_ID.length - 8)}` : 'undefined'
+  });
   
   if (!APP_ID) {
     throw new Error("RAKUTEN_APP_ID missing in environment variables");
