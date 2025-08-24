@@ -143,23 +143,17 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel): Hotel {
     dpPlanListUrl: rakutenHotel.dpPlanListUrl
   });
 
-  // 楽天APIが提供するアフィリエイトURLを優先使用
-  let affiliateUrl = rakutenHotel.hotelInformationUrl;
+  // 楽天APIのhotelInformationUrlは画像APIなので使用せず、
+  // 正しい楽天トラベルのホテル詳細・予約ページURLを生成
+  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+  const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+  const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
   
-  // 楽天APIのURLが楽天市場URLの場合は楽天トラベルURLに修正
-  if (affiliateUrl && affiliateUrl.includes('item.rakuten.co.jp')) {
-    console.log("⚠️ 楽天市場URLを検出、楽天トラベルURLに修正:", affiliateUrl);
-    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
-    const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-    affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
-  } else if (!affiliateUrl || affiliateUrl === '') {
-    console.log("⚠️ アフィリエイトURLが空、楽天トラベルURLを生成");
-    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
-    const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-    affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
-  }
-  
-  console.log("✅ 最終アフィリエイトURL:", affiliateUrl);
+  console.log("✅ 正しい楽天トラベルURL生成:", {
+    hotelNo: rakutenHotel.hotelNo,
+    directUrl: travelUrl,
+    affiliateUrl: affiliateUrl
+  });
   
   return {
     id: `rakuten_${rakutenHotel.hotelNo}`,
