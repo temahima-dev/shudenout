@@ -17,6 +17,9 @@ export async function GET(request: NextRequest) {
     // デバッグリンク機能（debugLinks=1の時のみ）
     const debugLinks = searchParams.get("debugLinks") === "1";
     
+    // 生リンクモード（raw=1の時のみ）
+    const rawMode = searchParams.get("raw") === "1";
+    
     // URLパラメータを取得
     const area = searchParams.get("area") || undefined;
     const lat = searchParams.get("lat") ? parseFloat(searchParams.get("lat")!) : undefined;
@@ -38,7 +41,8 @@ export async function GET(request: NextRequest) {
         minCharge: minPrice,
         maxCharge: maxPrice,
         sort: "+roomCharge" as "+roomCharge",
-        withDebug: debugLinks // デバッグフラグを渡す
+        withDebug: debugLinks, // デバッグフラグを渡す
+        rawMode: rawMode // 生リンクモードフラグを渡す
       });
       
       rakutenStatus = 200; // searchHotels が成功した場合
@@ -118,6 +122,7 @@ export async function GET(request: NextRequest) {
             hotels: qualityFilteredItems, 
             success: true,
             isSample: false, // fetch 成功時は false
+            mode: rawMode ? "raw" : "normal", // モード情報を追加
             ...(debug && { debug })
           },
           { 

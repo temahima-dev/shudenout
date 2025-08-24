@@ -10,9 +10,14 @@ const ALLOWED_DOMAINS = [
  * 楽天ホテルリンクの安全性をチェックし、許可ドメイン以外は修正する
  * @param url チェック対象のURL
  * @param fallbackHotelNo フォールバック用のホテル番号（任意）
+ * @param originalApiUrls 元のAPIから取得したURL情報（フォールバック用）
  * @returns 安全なURL、または空文字
  */
-export function safeHotelLink(url: string, fallbackHotelNo?: number): string {
+export function safeHotelLink(
+  url: string, 
+  fallbackHotelNo?: number, 
+  originalApiUrls?: { hotelAffiliateUrl?: string; hotelInformationUrl?: string }
+): string {
   if (!url || url.trim() === '') {
     return '';
   }
@@ -30,15 +35,54 @@ export function safeHotelLink(url: string, fallbackHotelNo?: number): string {
       return url; // 許可ドメインなのでそのまま返す
     }
     
-    // 許可ドメイン以外（楽天市場等）の場合、楽天トラベルURLにフォールバック
-    console.warn(`⚠️ 非許可ドメインを検出: ${hostname}, 楽天トラベルにフォールバック`);
+    // 許可ドメイン以外（楽天市場等）の場合
+    console.warn(`⚠️ 非許可ドメインを検出: ${hostname}, フォールバック中...`);
     
+    // 1. 元のAPIからhotelAffiliateUrlが許可ドメインなら復帰
+    if (originalApiUrls?.hotelAffiliateUrl) {
+      try {
+        const affiliateUrlObj = new URL(originalApiUrls.hotelAffiliateUrl);
+        const affiliateHostname = affiliateUrlObj.hostname.toLowerCase();
+        const isAffiliateAllowed = ALLOWED_DOMAINS.some(domain => 
+          affiliateHostname === domain || affiliateHostname.endsWith('.' + domain)
+        );
+        
+        if (isAffiliateAllowed) {
+          console.log(`✅ APIのhotelAffiliateUrlに復帰: ${originalApiUrls.hotelAffiliateUrl}`);
+          return originalApiUrls.hotelAffiliateUrl;
+        }
+      } catch {
+        // URL解析エラーは無視して次へ
+      }
+    }
+    
+    // 2. 元のAPIからhotelInformationUrlが許可ドメインなら復帰
+    if (originalApiUrls?.hotelInformationUrl) {
+      try {
+        const infoUrlObj = new URL(originalApiUrls.hotelInformationUrl);
+        const infoHostname = infoUrlObj.hostname.toLowerCase();
+        const isInfoAllowed = ALLOWED_DOMAINS.some(domain => 
+          infoHostname === domain || infoHostname.endsWith('.' + domain)
+        );
+        
+        if (isInfoAllowed) {
+          console.log(`✅ APIのhotelInformationUrlに復帰: ${originalApiUrls.hotelInformationUrl}`);
+          return originalApiUrls.hotelInformationUrl;
+        }
+      } catch {
+        // URL解析エラーは無視して次へ
+      }
+    }
+    
+    // 3. ホテル番号があれば楽天トラベルの正規URLを生成
     if (fallbackHotelNo) {
-      // ホテル番号があれば楽天トラベルの正規URLを生成
-      return `https://travel.rakuten.co.jp/HOTEL/${fallbackHotelNo}/${fallbackHotelNo}.html`;
+      const fallbackUrl = `https://travel.rakuten.co.jp/HOTEL/${fallbackHotelNo}/${fallbackHotelNo}.html`;
+      console.log(`🔄 楽天トラベル正規URLに復帰: ${fallbackUrl}`);
+      return fallbackUrl;
     }
     
     // フォールバックできない場合は空文字
+    console.error(`❌ フォールバック不可: ${url}`);
     return '';
     
   } catch (error) {

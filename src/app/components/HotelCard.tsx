@@ -39,7 +39,10 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
     
     // 最終安全性チェック（許可ドメイン以外は修正）
     const hotelNo = hotel.id.replace('rakuten_', '');
-    const safeUrl = safeHotelLink(urlWithParams, parseInt(hotelNo));
+    const safeUrl = safeHotelLink(urlWithParams, parseInt(hotelNo), {
+      hotelAffiliateUrl: hotel.debugInfo?.fromApi?.hotelAffiliateUrl,
+      hotelInformationUrl: hotel.debugInfo?.fromApi?.hotelInformationUrl
+    });
     
     window.open(safeUrl, "_blank", "noopener,noreferrer");
   };

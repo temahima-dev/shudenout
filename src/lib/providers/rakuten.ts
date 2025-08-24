@@ -26,6 +26,7 @@ interface SearchParams {
   detailClassCode?: string;
   sort?: "standard" | "+roomCharge" | "-roomCharge";
   withDebug?: boolean;
+  rawMode?: boolean;
 }
 
 interface RakutenHotel {
@@ -131,33 +132,49 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
 }
 
 // 楽天ホテルデータをアプリのHotel型にマッピング
-function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false): Hotel {
+function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false, rawMode = false): Hotel {
   // エリアを住所から抽出
   const area = extractAreaFromAddress(rakutenHotel.address1);
   
   // 設備情報（楽天APIからは詳細取得が必要なため、デフォルト設定）
   const amenities: Array<"シャワー" | "WiFi" | "2人可"> = ["WiFi"];
   
-  // リンク採用ポリシーの固定化
+  // リンク採用ポリシー
   let affiliateUrl = '';
   
-  // 1. APIからhotelAffiliateUrlが来ていれば最優先で採用（既にトラッキング済み）
-  if (rakutenHotel.hotelAffiliateUrl) {
-    affiliateUrl = rakutenHotel.hotelAffiliateUrl;
+  if (rawMode) {
+    // 【RAWモード】：APIが返したURLを一切加工せず
+    if (rakutenHotel.hotelAffiliateUrl) {
+      affiliateUrl = rakutenHotel.hotelAffiliateUrl;
+    } else if (rakutenHotel.hotelInformationUrl) {
+      affiliateUrl = rakutenHotel.hotelInformationUrl;
+    } else {
+      affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+    }
+    // rawModeでは safeHotelLink を通さない
+  } else {
+    // 【通常モード】：既存のポリシー + 安全性チェック
+    // 1. APIからhotelAffiliateUrlが来ていれば最優先で採用（既にトラッキング済み）
+    if (rakutenHotel.hotelAffiliateUrl) {
+      affiliateUrl = rakutenHotel.hotelAffiliateUrl;
+    }
+    // 2. なければhotelInformationUrlにRAKUTEN_AFFILIATE_IDを付与してアフィ化
+    else if (rakutenHotel.hotelInformationUrl) {
+      const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+      const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+      affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
+    }
+    // 3. どちらもなければ非アフィの情報URL
+    else {
+      affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+    }
+    
+    // 最終安全性チェック（許可ドメイン以外は修正）
+    affiliateUrl = safeHotelLink(affiliateUrl, rakutenHotel.hotelNo, {
+      hotelAffiliateUrl: rakutenHotel.hotelAffiliateUrl,
+      hotelInformationUrl: rakutenHotel.hotelInformationUrl
+    });
   }
-  // 2. なければhotelInformationUrlにRAKUTEN_AFFILIATE_IDを付与してアフィ化
-  else if (rakutenHotel.hotelInformationUrl) {
-    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
-    const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-    affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
-  }
-  // 3. どちらもなければ非アフィの情報URL
-  else {
-    affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-  }
-  
-  // 最終安全性チェック（許可ドメイン以外は修正）
-  affiliateUrl = safeHotelLink(affiliateUrl, rakutenHotel.hotelNo);
   
   const hotel: Hotel = {
     id: `rakuten_${rakutenHotel.hotelNo}`,
@@ -298,7 +315,7 @@ export async function searchHotels(searchParams: SearchParams): Promise<SearchRe
     
     const hotels = data.hotels.map((hotelData) => {
       const hotel = hotelData[0].hotelBasicInfo;
-      return mapRakutenToHotel(hotel, searchParams.withDebug);
+      return mapRakutenToHotel(hotel, searchParams.withDebug, searchParams.rawMode);
     });
     
     return {
@@ -398,7 +415,7 @@ export async function searchVacancy(searchParams: SearchParams): Promise<SearchR
     
     const hotels = data.hotels.map((hotelData) => {
       const hotel = hotelData[0].hotelBasicInfo;
-      return mapRakutenToHotel(hotel, searchParams.withDebug);
+      return mapRakutenToHotel(hotel, searchParams.withDebug, searchParams.rawMode);
     });
     
     return {
