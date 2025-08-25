@@ -21,6 +21,7 @@ export interface Hotel {
       hotelInformationUrl?: string;
       planListUrl?: string;
     };
+    extractedValidUrl: string; // 有効URL抽出結果
     afterNormalize: string;
     finalHrefSample: string;
   };

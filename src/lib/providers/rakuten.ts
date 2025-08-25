@@ -131,6 +131,40 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
   throw lastError!;
 }
 
+// 楽天APIから有効なホテル詳細URLを取得する
+function extractValidHotelUrl(rakutenHotel: RakutenHotel): string {
+  // 1. hotelAffiliateUrlが存在し、かつ許可ドメインなら使用
+  if (rakutenHotel.hotelAffiliateUrl) {
+    try {
+      const url = new URL(rakutenHotel.hotelAffiliateUrl);
+      if (url.hostname === 'hb.afl.rakuten.co.jp' || url.hostname === 'travel.rakuten.co.jp') {
+        return rakutenHotel.hotelAffiliateUrl;
+      }
+    } catch {
+      // URL解析エラーは無視
+    }
+  }
+  
+  // 2. hotelInformationUrlが存在し、かつ画像URLでなく、許可ドメインなら使用
+  if (rakutenHotel.hotelInformationUrl) {
+    try {
+      const url = new URL(rakutenHotel.hotelInformationUrl);
+      // 画像URLの除外（img.travel.rakuten.co.jp や画像ファイル拡張子）
+      const isImageUrl = url.hostname === 'img.travel.rakuten.co.jp' || 
+                        /\.(jpg|jpeg|png|gif|webp)$/i.test(url.pathname);
+      
+      if (!isImageUrl && url.hostname === 'travel.rakuten.co.jp') {
+        return rakutenHotel.hotelInformationUrl;
+      }
+    } catch {
+      // URL解析エラーは無視
+    }
+  }
+  
+  // 3. どちらも使えない場合は楽天トラベルの標準URLを生成
+  return `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+}
+
 // 楽天ホテルデータをアプリのHotel型にマッピング
 function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false, rawMode = false): Hotel {
   // エリアを住所から抽出
@@ -143,33 +177,38 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false, rawMod
   let affiliateUrl = '';
   
   if (rawMode) {
-    // 【RAWモード】：APIが返したURLを一切加工せず
-    if (rakutenHotel.hotelAffiliateUrl) {
-      affiliateUrl = rakutenHotel.hotelAffiliateUrl;
-    } else if (rakutenHotel.hotelInformationUrl) {
-      affiliateUrl = rakutenHotel.hotelInformationUrl;
-    } else {
-      affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-    }
+    // 【RAWモード】：APIが返した有効なURLをそのまま使用（ただし画像URLは除外）
+    affiliateUrl = extractValidHotelUrl(rakutenHotel);
     // rawModeでは safeHotelLink を通さない
   } else {
-    // 【通常モード】：既存のポリシー + 安全性チェック
-    // 1. APIからhotelAffiliateUrlが来ていれば最優先で採用（既にトラッキング済み）
+    // 【通常モード】：アフィリエイト化 + 安全性チェック
+    
+    // 1. APIからhotelAffiliateUrlが来ていて有効なら最優先で採用
     if (rakutenHotel.hotelAffiliateUrl) {
-      affiliateUrl = rakutenHotel.hotelAffiliateUrl;
-    }
-    // 2. なければhotelInformationUrlにRAKUTEN_AFFILIATE_IDを付与してアフィ化
-    else if (rakutenHotel.hotelInformationUrl) {
-      const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
-      const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-      affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
-    }
-    // 3. どちらもなければ非アフィの情報URL
-    else {
-      affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+      try {
+        const url = new URL(rakutenHotel.hotelAffiliateUrl);
+        if (url.hostname === 'hb.afl.rakuten.co.jp' || url.hostname === 'travel.rakuten.co.jp') {
+          affiliateUrl = rakutenHotel.hotelAffiliateUrl;
+        }
+      } catch {
+        // URL解析エラーの場合は次の選択肢へ
+      }
     }
     
-    // 最終安全性チェック（許可ドメイン以外は修正）
+    // 2. hotelAffiliateUrlが使えない場合、有効なホテル詳細URLを取得してアフィリエイト化
+    if (!affiliateUrl) {
+      const validHotelUrl = extractValidHotelUrl(rakutenHotel);
+      const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "3f0a6b1d.2e23bbf6.3f0a6b1e.1da6c30e";
+      
+      // 既にアフィリエイトリンクの場合はそのまま、そうでなければアフィリエイト化
+      if (validHotelUrl.includes('hb.afl.rakuten.co.jp')) {
+        affiliateUrl = validHotelUrl;
+      } else {
+        affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(validHotelUrl)}`;
+      }
+    }
+    
+    // 3. 最終安全性チェック（許可ドメイン以外は修正）
     affiliateUrl = safeHotelLink(affiliateUrl, rakutenHotel.hotelNo, {
       hotelAffiliateUrl: rakutenHotel.hotelAffiliateUrl,
       hotelInformationUrl: rakutenHotel.hotelInformationUrl
@@ -206,6 +245,7 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false, rawMod
         hotelInformationUrl: rakutenHotel.hotelInformationUrl,
         planListUrl: rakutenHotel.planListUrl,
       },
+      extractedValidUrl: extractValidHotelUrl(rakutenHotel), // 有効URL抽出結果
       afterNormalize: affiliateUrl,
       finalHrefSample: finalHrefSample,
     };
