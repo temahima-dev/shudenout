@@ -24,6 +24,7 @@ export interface Hotel {
     extractedValidUrl: string; // 有効URL抽出結果
     afterNormalize: string;
     finalHrefSample: string;
+    affiliateIdPresent: boolean; // アフィリエイトID設定状況
   };
 }
 
