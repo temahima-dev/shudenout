@@ -25,6 +25,7 @@ export interface Hotel {
     afterNormalize: string;
     finalHrefSample: string;
     affiliateIdPresent: boolean; // アフィリエイトID設定状況
+    selectedFrom: string; // 選択元（hb.afl or travel.rakuten）
   };
 }
 
