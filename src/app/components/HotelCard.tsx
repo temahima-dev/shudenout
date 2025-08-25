@@ -1,7 +1,6 @@
 "use client";
 
 import { type Hotel } from "@/app/data/hotels";
-import { withBookingParams, safeHotelLink } from "@/lib/url";
 import { formatDistance, formatWalkingTime } from "@/lib/geolocation";
 import { trackHotelBooking } from "@/lib/analytics";
 import LazyImage from "./LazyImage";
@@ -16,7 +15,7 @@ interface HotelCardProps {
 export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }: HotelCardProps) {
   const handleReservationClick = () => {
     // コンソールログ（デバッグ用）
-    console.log({ event: "book_click", id: hotel.id });
+    console.log({ event: "book_click", id: hotel.id, affiliateUrl: hotel.affiliateUrl });
     
     // Google Analytics追跡
     trackHotelBooking({
@@ -27,24 +26,32 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
       distanceKm: hotel.distanceKm,
     });
     
-    const urlWithParams = withBookingParams(hotel.affiliateUrl, {
-      checkinDate,
-      checkoutDate,
-      adultNum,
-      utm: {
-        utm_source: 'shudenout',
-        utm_medium: 'affiliate'
+    // APIから提供されるaffiliateUrlをそのまま使用
+    // 既にアフィリエイト化済みのため、余計な変換は行わない
+    let finalUrl = hotel.affiliateUrl;
+    
+    // 楽天トラベルの正規URLの場合のみ、予約パラメータを追加
+    try {
+      const url = new URL(finalUrl);
+      
+      // travel.rakuten.co.jp の場合は検索パラメータを追加可能
+      if (url.hostname === 'travel.rakuten.co.jp') {
+        if (checkinDate) url.searchParams.set('checkin', checkinDate);
+        if (checkoutDate) url.searchParams.set('checkout', checkoutDate);
+        if (adultNum) url.searchParams.set('adults', adultNum.toString());
+        url.searchParams.set('utm_source', 'shudenout');
+        url.searchParams.set('utm_medium', 'affiliate');
+        finalUrl = url.toString();
       }
-    });
+      // hb.afl.rakuten.co.jp の場合はアフィリエイトリンクなのでそのまま
+      
+    } catch (error) {
+      console.warn('URL処理エラー、元のURLを使用:', error);
+      // エラーの場合は元のURLをそのまま使用
+    }
     
-    // 最終安全性チェック（許可ドメイン以外は修正）
-    const hotelNo = hotel.id.replace('rakuten_', '');
-    const safeUrl = safeHotelLink(urlWithParams, parseInt(hotelNo), {
-      hotelAffiliateUrl: hotel.debugInfo?.fromApi?.hotelAffiliateUrl,
-      hotelInformationUrl: hotel.debugInfo?.fromApi?.hotelInformationUrl
-    });
-    
-    window.open(safeUrl, "_blank", "noopener,noreferrer");
+    console.log('最終リンク:', finalUrl);
+    window.open(finalUrl, "_blank", "noopener,noreferrer");
   };
 
   // 評価表示用のスター
