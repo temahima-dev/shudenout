@@ -41,7 +41,7 @@ export default function RootLayout({
         <StructuredData data={websiteStructuredData} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-gray-50`}
       >
         <GoogleAnalytics />
         <Header />
