@@ -671,6 +671,47 @@ function HomeContent() {
                     <option value="六本木">六本木</option>
                   </select>
                 </div>
+                
+                {/* モバイル版: 現在地から探すボタン */}
+                <div className="md:hidden mt-2 flex space-x-2">
+                  <button
+                    onClick={handleGetCurrentLocation}
+                    disabled={isGettingLocation || useCurrentLocation}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm"
+                  >
+                    {isGettingLocation ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        <span>位置情報取得中...</span>
+                      </>
+                    ) : useCurrentLocation ? (
+                      <>
+                        <span>✅</span>
+                        <span>現在地を使用中</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>📍</span>
+                        <span>現在地から探す</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  {/* モバイル版: 現在地リセットボタン */}
+                  {useCurrentLocation && (
+                    <button
+                      onClick={() => {
+                        setUseCurrentLocation(false);
+                        setCurrentLocation(null);
+                        handleAreaChange("全て");
+                      }}
+                      className="px-3 py-3 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center"
+                      title="現在地検索を解除"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
                 {/* デスクトップ表示: 通常のプルダウン */}
                 <div className="hidden md:block space-y-2">
                   <select
@@ -695,9 +736,51 @@ function HomeContent() {
                     <option value="池袋">池袋</option>
                     <option value="六本木">六本木</option>
                   </select>
+                  
+                  {/* 現在地から探すボタン */}
+                  <div className="mt-2 flex space-x-2">
+                    <button
+                      onClick={handleGetCurrentLocation}
+                      disabled={isGettingLocation || useCurrentLocation}
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm"
+                    >
+                      {isGettingLocation ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          <span>位置情報取得中...</span>
+                        </>
+                      ) : useCurrentLocation ? (
+                        <>
+                          <span>✅</span>
+                          <span>現在地を使用中</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>📍</span>
+                          <span>現在地から探す</span>
+                        </>
+                      )}
+                    </button>
+                    
+                    {/* 現在地リセットボタン */}
+                    {useCurrentLocation && (
+                      <button
+                        onClick={() => {
+                          setUseCurrentLocation(false);
+                          setCurrentLocation(null);
+                          handleAreaChange("全て");
+                        }}
+                        className="px-3 py-3 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center"
+                        title="現在地検索を解除"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  
                   {useCurrentLocation && currentLocation && (
-                    <p className="text-xs text-green-600 flex items-center">
-                      ✅ 現在地を使用中 (半径1km)
+                    <p className="text-xs text-green-600 flex items-center mt-1">
+                      ✅ 現在地周辺のホテルを表示中 (半径2km)
                     </p>
                   )}
                   {isGettingLocation && (
@@ -710,7 +793,7 @@ function HomeContent() {
                 <div className="md:hidden">
                   {useCurrentLocation && currentLocation && (
                     <p className="text-xs text-green-600 flex items-center mt-1">
-                      ✅ 現在地を使用中 (半径1km)
+                      ✅ 現在地周辺のホテルを表示中 (半径2km)
                     </p>
                   )}
                   {isGettingLocation && (
