@@ -611,7 +611,7 @@ function HomeContent() {
                   <select
                     value={adultNum}
                     onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
-                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm"
+                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm text-gray-900"
                   >
                     <option value={2}>2人</option>
                     <option value={1}>1人</option>
@@ -623,7 +623,7 @@ function HomeContent() {
                 <select
                   value={adultNum}
                   onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
+                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm text-gray-900"
                 >
                   <option value={2}>2人</option>
                   <option value={1}>1人</option>
@@ -659,7 +659,7 @@ function HomeContent() {
                       }
                     }}
                     disabled={isGettingLocation}
-                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm disabled:opacity-50 text-base"
+                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm disabled:opacity-50 text-base text-gray-900"
                   >
                     <option value="全て">全て</option>
                     <option value="現在地">📍 現在地から検索</option>
@@ -684,7 +684,7 @@ function HomeContent() {
                       }
                     }}
                     disabled={isGettingLocation}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm disabled:opacity-50"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm disabled:opacity-50 text-gray-900"
                   >
                     <option value="全て">全て</option>
                     <option value="現在地">📍 現在地から検索</option>
@@ -735,7 +735,7 @@ function HomeContent() {
                   <select
                     value={priceFilter}
                     onChange={(e) => handlePriceChange(e.target.value as PriceFilter)}
-                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-base"
+                    className="flex-1 p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-base text-gray-900"
                   >
                     <option value="指定なし">指定なし</option>
                     <option value="~5000">~5,000円</option>
@@ -747,7 +747,7 @@ function HomeContent() {
                 <select
                   value={priceFilter}
                   onChange={(e) => handlePriceChange(e.target.value as PriceFilter)}
-                  className="hidden md:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                  className="hidden md:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-gray-900"
                 >
                   <option value="指定なし">指定なし</option>
                   <option value="~5000">~5,000円</option>
