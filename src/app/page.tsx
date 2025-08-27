@@ -552,7 +552,7 @@ function HomeContent() {
                     value={checkinDate}
                     min={getTodayString()}
                     onChange={(e) => handleCheckinDateChange(e.target.value)}
-                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer"
+                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer text-gray-900"
                   />
                 </div>
                 {/* デスクトップ表示: 通常の入力フィールド */}
@@ -562,7 +562,7 @@ function HomeContent() {
                   value={checkinDate}
                   min={getTodayString()}
                   onChange={(e) => handleCheckinDateChange(e.target.value)}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer"
+                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer text-gray-900"
                 />
               </div>
 
@@ -583,7 +583,7 @@ function HomeContent() {
                     value={checkoutDate}
                     min={checkinDate}
                     onChange={(e) => handleCheckoutDateChange(e.target.value)}
-                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer"
+                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer text-gray-900"
                   />
                 </div>
                 {/* デスクトップ表示: 通常の入力フィールド */}
@@ -593,7 +593,7 @@ function HomeContent() {
                   value={checkoutDate}
                   min={checkinDate}
                   onChange={(e) => handleCheckoutDateChange(e.target.value)}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer"
+                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer text-gray-900"
                 />
               </div>
 
