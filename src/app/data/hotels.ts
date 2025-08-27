@@ -29,6 +29,7 @@ export interface Hotel {
     envAffiliateId: boolean; // 環境変数設定状況
     extractedHotelId: number; // 抽出されたホテルID
     finalTarget: string; // 最終ターゲットURL
+    decodedPc: string; // pc=パラメータのデコード結果
   };
 }
 
