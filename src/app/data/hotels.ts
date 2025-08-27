@@ -27,6 +27,8 @@ export interface Hotel {
     affiliateIdPresent: boolean; // アフィリエイトID設定状況
     selectedFrom: string; // 選択元（hb.afl or travel.rakuten）
     envAffiliateId: boolean; // 環境変数設定状況
+    extractedHotelId: number; // 抽出されたホテルID
+    finalTarget: string; // 最終ターゲットURL
   };
 }
 
