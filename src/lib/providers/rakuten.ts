@@ -183,7 +183,7 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false, rawMod
   } else {
     // 【通常モード】：アフィリエイト化
     
-    // 1. APIから有効なアフィリエイトリンク（hb.afl）を最優先で探す
+    // 1. APIからhb.aflアフィリエイトリンクを最優先で使用（変換なし）
     if (rakutenHotel.hotelAffiliateUrl && rakutenHotel.hotelAffiliateUrl.includes('hb.afl.rakuten.co.jp')) {
       affiliateUrl = rakutenHotel.hotelAffiliateUrl;
     }
@@ -191,34 +191,18 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false, rawMod
     else if (rakutenHotel.planListUrl && rakutenHotel.planListUrl.includes('hb.afl.rakuten.co.jp')) {
       affiliateUrl = rakutenHotel.planListUrl;
     }
-    // 3. travel.rakuten.co.jpの直接リンクがある場合
-    else if (rakutenHotel.hotelAffiliateUrl && rakutenHotel.hotelAffiliateUrl.includes('travel.rakuten.co.jp')) {
-      affiliateUrl = rakutenHotel.hotelAffiliateUrl;
-    }
-    // 4. hotelInformationUrlでhb.aflリンクを生成
-    else if (rakutenHotel.hotelInformationUrl) {
-      // hotelInformationUrlが画像URLでないかチェック
-      const isImageUrl = rakutenHotel.hotelInformationUrl.includes('img.travel.rakuten.co.jp') || 
-                        /\.(jpg|jpeg|png|gif|webp)$/i.test(rakutenHotel.hotelInformationUrl);
-      
-      if (!isImageUrl) {
-        const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
-        
-        if (AFF_ID) {
-          // 環境変数でアフィリエイトIDが設定されている場合
-          affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(rakutenHotel.hotelInformationUrl)}`;
-        } else {
-          // 環境変数がない場合は直接URLを使用
-          affiliateUrl = rakutenHotel.hotelInformationUrl;
-        }
-      } else {
-        // 画像URLの場合は標準URLを生成
-        affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
-      }
-    }
-    // 5. どれもない場合は楽天トラベルの標準URL
+    // 3. 自前でhb.aflリンクを生成
     else {
-      affiliateUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+      const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID || "4bb1347b.68fd3c85.4bb1347c.70e9a972";
+      const travelUrl = `https://travel.rakuten.co.jp/HOTEL/${rakutenHotel.hotelNo}/${rakutenHotel.hotelNo}.html`;
+      
+      if (AFF_ID && AFF_ID !== "4bb1347b.68fd3c85.4bb1347c.70e9a972") {
+        // 正式なアフィリエイトIDが設定されている場合
+        affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${AFF_ID}/?pc=${encodeURIComponent(travelUrl)}`;
+      } else {
+        // 環境変数未設定またはデフォルト値の場合は直接リンク
+        affiliateUrl = travelUrl;
+      }
     }
     
     // hb.aflリンクの場合はsafeHotelLinkを通さない（アフィリエイトリンクを保持）

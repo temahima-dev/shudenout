@@ -13,7 +13,7 @@ interface HotelCardProps {
 }
 
 export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }: HotelCardProps) {
-  const handleReservationClick = () => {
+  const handleAnalyticsTracking = () => {
     // コンソールログ（デバッグ用）
     console.log({ event: "book_click", id: hotel.id, affiliateUrl: hotel.affiliateUrl });
     
@@ -25,33 +25,6 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
       area: hotel.area,
       distanceKm: hotel.distanceKm,
     });
-    
-    // APIから提供されるaffiliateUrlをそのまま使用
-    // 既にアフィリエイト化済みのため、余計な変換は行わない
-    let finalUrl = hotel.affiliateUrl;
-    
-    // 楽天トラベルの正規URLの場合のみ、予約パラメータを追加
-    try {
-      const url = new URL(finalUrl);
-      
-      // travel.rakuten.co.jp の場合は検索パラメータを追加可能
-      if (url.hostname === 'travel.rakuten.co.jp') {
-        if (checkinDate) url.searchParams.set('checkin', checkinDate);
-        if (checkoutDate) url.searchParams.set('checkout', checkoutDate);
-        if (adultNum) url.searchParams.set('adults', adultNum.toString());
-        url.searchParams.set('utm_source', 'shudenout');
-        url.searchParams.set('utm_medium', 'affiliate');
-        finalUrl = url.toString();
-      }
-      // hb.afl.rakuten.co.jp の場合はアフィリエイトリンクなのでそのまま
-      
-    } catch (error) {
-      console.warn('URL処理エラー、元のURLを使用:', error);
-      // エラーの場合は元のURLをそのまま使用
-    }
-    
-    console.log('最終リンク:', finalUrl);
-    window.open(finalUrl, "_blank", "noopener,noreferrer");
   };
 
   // 評価表示用のスター
@@ -173,9 +146,12 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
         </div>
         
         {/* 予約ボタン */}
-        <button
-          onClick={handleReservationClick}
-          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:transform active:scale-[0.98]"
+        <a
+          href={hotel.affiliateUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleAnalyticsTracking}
+          className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:transform active:scale-[0.98] text-center"
           data-analytics="book"
           data-hotel-id={hotel.id}
         >
@@ -185,7 +161,7 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
             </svg>
             今すぐ予約
           </span>
-        </button>
+        </a>
       </div>
     </div>
   );
