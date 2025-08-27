@@ -1,18 +1,119 @@
-// 楽天ホテルリンクの安全性チェック
+// 楽天ホテルリンクの安全性チェック・URL正規化
 
 const ALLOWED_DOMAINS = [
-  'travel.rakuten.co.jp',          // 楽天トラベル本体
-  'hb.afl.rakuten.co.jp',          // 楽天アフィリエイト中継
-  // 'img.travel.rakuten.co.jp',   // 画像API（将来拡張用、現在は対象外）
+  'travel.rakuten.co.jp',
+  'hotel.travel.rakuten.co.jp',
+  'hb.afl.rakuten.co.jp'
 ];
 
-/**
- * 楽天ホテルリンクの安全性をチェックし、許可ドメイン以外は修正する
- * @param url チェック対象のURL
- * @param fallbackHotelNo フォールバック用のホテル番号（任意）
- * @param originalApiUrls 元のAPIから取得したURL情報（フォールバック用）
- * @returns 安全なURL、または空文字
- */
+// 画像APIのURLかどうかを判定する
+export function isImageApiUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname === 'img.travel.rakuten.co.jp' && urlObj.pathname.includes('/image/tr/api/');
+  } catch {
+    return false;
+  }
+}
+
+// URLからホテルIDを抽出する
+export function extractHotelId(url: string): number | null {
+  try {
+    // f_no=パラメータから抽出
+    const fNoMatch = url.match(/[?&]f_no=(\d+)/);
+    if (fNoMatch) {
+      return parseInt(fNoMatch[1], 10);
+    }
+    
+    // /HOTEL/{id}/{id}.html パターンから抽出
+    const hotelMatch = url.match(/\/HOTEL\/(\d+)\/\d+\.html/);
+    if (hotelMatch) {
+      return parseInt(hotelMatch[1], 10);
+    }
+    
+    // hb.aflのpc=パラメータから抽出
+    if (url.includes('hb.afl.rakuten.co.jp')) {
+      const urlObj = new URL(url);
+      const pcParam = urlObj.searchParams.get('pc');
+      if (pcParam) {
+        const decodedPc = decodeURIComponent(pcParam);
+        return extractHotelId(decodedPc);
+      }
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ホテル詳細URLに正規化する
+export function normalizeTargetToHotelDetail(url: string, fallbackId?: number): string {
+  // 画像APIの場合は処理しない（呼び出し側でfallback）
+  if (isImageApiUrl(url)) {
+    if (fallbackId) {
+      return `https://travel.rakuten.co.jp/HOTEL/${fallbackId}/${fallbackId}.html`;
+    }
+    return url; // フォールバック不可の場合はそのまま返す
+  }
+  
+  const hotelId = extractHotelId(url);
+  if (hotelId) {
+    return `https://travel.rakuten.co.jp/HOTEL/${hotelId}/${hotelId}.html`;
+  }
+  
+  // ホテルIDが取れない場合
+  if (fallbackId) {
+    return `https://travel.rakuten.co.jp/HOTEL/${fallbackId}/${fallbackId}.html`;
+  }
+  
+  return url; // フォールバック不可の場合はそのまま返す
+}
+
+// アフィリエイトURLを構築する（二重エンコード防止）
+export function buildAffiliateUrl(targetUrl: string, affiliateId: string): string {
+  // 二重エンコード検出・正規化
+  const normalized = /%25[0-9A-Fa-f]{2}/.test(targetUrl) 
+    ? decodeURIComponent(targetUrl) 
+    : targetUrl;
+  
+  return `https://hb.afl.rakuten.co.jp/hgc/${affiliateId}/?pc=${encodeURIComponent(normalized)}`;
+}
+
+// アフィリエイトURLのターゲットを検証する
+export function validateAffiliateTargetUrl(url: string): { isValid: boolean; reason?: string } {
+  try {
+    const urlObj = new URL(url);
+    
+    // hb.aflリンクでない場合は直接ホストをチェック
+    if (urlObj.hostname !== 'hb.afl.rakuten.co.jp') {
+      const isAllowed = urlObj.hostname === 'travel.rakuten.co.jp' || urlObj.hostname === 'hotel.travel.rakuten.co.jp';
+      return {
+        isValid: isAllowed,
+        reason: isAllowed ? undefined : `Non-affiliate host: ${urlObj.hostname}`
+      };
+    }
+    
+    // hb.aflの場合はpc=パラメータをチェック
+    const pcParam = urlObj.searchParams.get('pc');
+    if (!pcParam) {
+      return { isValid: false, reason: 'Missing pc parameter in hb.afl URL' };
+    }
+    
+    const pcDecoded = decodeURIComponent(pcParam);
+    const pcUrlObj = new URL(pcDecoded);
+    const isValidHost = pcUrlObj.hostname === 'travel.rakuten.co.jp' || pcUrlObj.hostname === 'hotel.travel.rakuten.co.jp';
+    
+    return {
+      isValid: isValidHost,
+      reason: isValidHost ? undefined : `Invalid pc host: ${pcUrlObj.hostname}`
+    };
+  } catch {
+    return { isValid: false, reason: 'Invalid URL format' };
+  }
+}
+
+// 安全なホテルリンクを生成する関数（レガシー互換・新機能使用）
 export function safeHotelLink(
   url: string, 
   fallbackHotelNo?: number, 
@@ -22,73 +123,38 @@ export function safeHotelLink(
     return '';
   }
 
-  try {
-    const urlObj = new URL(url);
-    const hostname = urlObj.hostname.toLowerCase();
-    
-    // 許可ドメインのチェック
-    const isAllowed = ALLOWED_DOMAINS.some(domain => 
-      hostname === domain || hostname.endsWith('.' + domain)
-    );
-    
-    if (isAllowed) {
-      return url; // 許可ドメインなのでそのまま返す
-    }
-    
-    // 許可ドメイン以外（楽天市場等）の場合
-    console.warn(`⚠️ 非許可ドメインを検出: ${hostname}, フォールバック中...`);
-    
-    // 1. 元のAPIからhotelAffiliateUrlが許可ドメインなら復帰
-    if (originalApiUrls?.hotelAffiliateUrl) {
-      try {
-        const affiliateUrlObj = new URL(originalApiUrls.hotelAffiliateUrl);
-        const affiliateHostname = affiliateUrlObj.hostname.toLowerCase();
-        const isAffiliateAllowed = ALLOWED_DOMAINS.some(domain => 
-          affiliateHostname === domain || affiliateHostname.endsWith('.' + domain)
-        );
-        
-        if (isAffiliateAllowed) {
-          console.log(`✅ APIのhotelAffiliateUrlに復帰: ${originalApiUrls.hotelAffiliateUrl}`);
-          return originalApiUrls.hotelAffiliateUrl;
-        }
-      } catch {
-        // URL解析エラーは無視して次へ
-      }
-    }
-    
-    // 2. 元のAPIからhotelInformationUrlが許可ドメインなら復帰
-    if (originalApiUrls?.hotelInformationUrl) {
-      try {
-        const infoUrlObj = new URL(originalApiUrls.hotelInformationUrl);
-        const infoHostname = infoUrlObj.hostname.toLowerCase();
-        const isInfoAllowed = ALLOWED_DOMAINS.some(domain => 
-          infoHostname === domain || infoHostname.endsWith('.' + domain)
-        );
-        
-        if (isInfoAllowed) {
-          console.log(`✅ APIのhotelInformationUrlに復帰: ${originalApiUrls.hotelInformationUrl}`);
-          return originalApiUrls.hotelInformationUrl;
-        }
-      } catch {
-        // URL解析エラーは無視して次へ
-      }
-    }
-    
-    // 3. ホテル番号があれば楽天トラベルの正規URLを生成
-    if (fallbackHotelNo) {
-      const fallbackUrl = `https://travel.rakuten.co.jp/HOTEL/${fallbackHotelNo}/${fallbackHotelNo}.html`;
-      console.log(`🔄 楽天トラベル正規URLに復帰: ${fallbackUrl}`);
-      return fallbackUrl;
-    }
-    
-    // フォールバックできない場合は空文字
-    console.error(`❌ フォールバック不可: ${url}`);
-    return '';
-    
-  } catch (error) {
-    console.error('URL解析エラー:', error);
-    return '';
+  const validation = validateAffiliateTargetUrl(url);
+  if (validation.isValid) {
+    return url;
   }
+  
+  console.warn(`🔗 無効なURL: ${validation.reason}, フォールバック中...`);
+  
+  // 元のAPIデータから有効なURLを探す
+  if (originalApiUrls) {
+    const candidates = [
+      originalApiUrls.hotelAffiliateUrl,
+      originalApiUrls.hotelInformationUrl
+    ].filter(Boolean);
+    
+    for (const candidate of candidates) {
+      const candidateValidation = validateAffiliateTargetUrl(candidate!);
+      if (candidateValidation.isValid && !isImageApiUrl(candidate!)) {
+        console.log(`🔗 有効な代替URL発見: ${candidate}`);
+        return candidate!;
+      }
+    }
+  }
+  
+  // 安全なフォールバックURL
+  if (fallbackHotelNo) {
+    const fallbackUrl = `https://travel.rakuten.co.jp/HOTEL/${fallbackHotelNo}/${fallbackHotelNo}.html`;
+    console.log(`🔄 楽天トラベル正規URLに復帰: ${fallbackUrl}`);
+    return fallbackUrl;
+  }
+  
+  console.error(`❌ フォールバック不可: ${url}`);
+  return '';
 }
 
 /**

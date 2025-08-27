@@ -1,6 +1,13 @@
 import 'server-only';
 import { Hotel } from "@/app/data/hotels";
-import { safeHotelLink, createFinalHrefSample } from "@/lib/url";
+import { 
+  extractHotelId, 
+  createFinalHrefSample, 
+  isImageApiUrl,
+  normalizeTargetToHotelDetail,
+  buildAffiliateUrl,
+  validateAffiliateTargetUrl
+} from "@/lib/url";
 
 // APIベースURL
 const BASE_URL = "https://app.rakuten.co.jp/services/api/Travel";
@@ -131,120 +138,20 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
   throw lastError!;
 }
 
-// ホテルIDを楽天URLから抽出する
-function extractHotelId(url: string, fallbackHotelNo: number): number {
-  try {
-    const urlObj = new URL(url);
-    
-    // 1. HOTEL/{id}/{id}.html パターン
-    const hotelMatch = urlObj.pathname.match(/\/HOTEL\/(\d+)\/\d+\.html/);
-    if (hotelMatch) {
-      return parseInt(hotelMatch[1], 10);
-    }
-    
-    // 2. f_no={id} クエリパラメータ
-    const fNoParam = urlObj.searchParams.get('f_no');
-    if (fNoParam) {
-      return parseInt(fNoParam, 10);
-    }
-    
-    // 3. hb.aflリンクのpc=パラメータから抽出
-    if (urlObj.hostname === 'hb.afl.rakuten.co.jp') {
-      const pcParam = urlObj.searchParams.get('pc');
-      if (pcParam) {
-        return extractHotelId(decodeURIComponent(pcParam), fallbackHotelNo);
-      }
-    }
-    
-  } catch {
-    // URL解析エラーは無視
-  }
-  
-  // 抽出できない場合はフォールバック
-  return fallbackHotelNo;
-}
 
-// 安全なホテル詳細URLを生成する
-function generateSafeHotelUrl(hotelId: number): string {
-  return `https://travel.rakuten.co.jp/HOTEL/${hotelId}/${hotelId}.html`;
-}
 
-// 二重エンコードを防止してアフィリエイトリンクを生成する
-function buildAffiliate(targetUrl: string, affiliateId: string): string {
-  // 既にエンコード済みっぽい文字列を検出したら一度だけ復元
-  const normalized = /%25[0-9A-Fa-f]{2}/.test(targetUrl) 
-    ? decodeURIComponent(targetUrl) 
-    : targetUrl;
-  
-  return `https://hb.afl.rakuten.co.jp/hgc/${affiliateId}/?pc=${encodeURIComponent(normalized)}`;
-}
 
-// 画像APIのURLかどうかを判定する
-function isImageApiUrl(url: string): boolean {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.hostname === 'img.travel.rakuten.co.jp' || 
-           urlObj.pathname.includes('/image/tr/api/');
-  } catch {
-    return false;
-  }
-}
 
-// hb.aflリンクのpc=パラメータを検証・修正する
-function validateAffiliateTargetUrl(affiliateUrl: string, hotelId: number, affiliateId: string): string {
-  try {
-    const urlObj = new URL(affiliateUrl);
-    
-    // hb.aflリンクでない場合はそのまま返す
-    if (urlObj.hostname !== 'hb.afl.rakuten.co.jp') {
-      return affiliateUrl;
-    }
-    
-    const pcParam = urlObj.searchParams.get('pc');
-    if (!pcParam) {
-      return affiliateUrl;
-    }
-    
-    const targetUrl = decodeURIComponent(pcParam);
-    
-    // 画像APIのURLの場合は安全なホテル詳細URLで再生成
-    if (isImageApiUrl(targetUrl)) {
-      console.warn(`🔗 画像API URL検出: ${targetUrl}, ホテル詳細URLに修正中...`);
-      const safeTargetUrl = generateSafeHotelUrl(hotelId);
-      return buildAffiliate(safeTargetUrl, affiliateId);
-    }
-    
-    try {
-      const targetUrlObj = new URL(targetUrl);
-      
-      // 許可されたホスト以外の場合は修正
-      const allowedHosts = ['travel.rakuten.co.jp', 'hotel.travel.rakuten.co.jp'];
-      if (!allowedHosts.includes(targetUrlObj.hostname)) {
-        console.warn(`🔗 不正なターゲットURL検出: ${targetUrlObj.hostname}, 修正中...`);
-        const safeTargetUrl = generateSafeHotelUrl(hotelId);
-        return buildAffiliate(safeTargetUrl, affiliateId);
-      }
-    } catch {
-      // ターゲットURLの解析に失敗した場合も修正
-      console.warn(`🔗 ターゲットURL解析失敗: ${targetUrl}, 修正中...`);
-      const safeTargetUrl = generateSafeHotelUrl(hotelId);
-      return buildAffiliate(safeTargetUrl, affiliateId);
-    }
-    
-    // 二重エンコードを防止して再生成
-    return buildAffiliate(targetUrl, affiliateId);
-    
-  } catch (error) {
-    console.warn(`🔗 アフィリエイトURL検証エラー: ${error}, フォールバック中...`);
-    const safeTargetUrl = generateSafeHotelUrl(hotelId);
-    return buildAffiliate(safeTargetUrl, affiliateId);
-  }
-}
+
+
+
+
+
 
 // 楽天APIから有効なホテル詳細URLを取得する（レガシー関数）
 function extractValidHotelUrl(rakutenHotel: RakutenHotel): string {
-  const hotelId = extractHotelId(rakutenHotel.hotelInformationUrl || '', rakutenHotel.hotelNo);
-  return generateSafeHotelUrl(hotelId);
+  const hotelId = extractHotelId(rakutenHotel.hotelInformationUrl || '') || rakutenHotel.hotelNo;
+  return `https://travel.rakuten.co.jp/HOTEL/${hotelId}/${hotelId}.html`;
 }
 
 // 楽天ホテルデータをアプリのHotel型にマッピング
@@ -260,66 +167,58 @@ function mapRakutenToHotel(rakutenHotel: RakutenHotel, withDebug = false, rawMod
   
   // ホテルIDを抽出して安全なターゲットURLを生成
   const hotelId = extractHotelId(
-    rakutenHotel.hotelInformationUrl || rakutenHotel.hotelAffiliateUrl || '', 
-    rakutenHotel.hotelNo
-  );
-  const safeTargetUrl = generateSafeHotelUrl(hotelId);
+    rakutenHotel.hotelInformationUrl || rakutenHotel.hotelAffiliateUrl || ''
+  ) || rakutenHotel.hotelNo;
+  const safeTargetUrl = `https://travel.rakuten.co.jp/HOTEL/${hotelId}/${hotelId}.html`;
   
-  if (rawMode) {
-    // 【RAWモード】：hb.afl優先、ターゲットURLを安全化
-    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
-    
-    // 画像APIのURLは使用しない
-    if (rakutenHotel.hotelAffiliateUrl && 
-        rakutenHotel.hotelAffiliateUrl.includes('hb.afl.rakuten.co.jp') &&
-        !isImageApiUrl(rakutenHotel.hotelAffiliateUrl)) {
-      // APIのhb.aflリンクを検証・修正
-      affiliateUrl = AFF_ID ? validateAffiliateTargetUrl(rakutenHotel.hotelAffiliateUrl, hotelId, AFF_ID) : rakutenHotel.hotelAffiliateUrl;
-    } else if (rakutenHotel.planListUrl && 
-               rakutenHotel.planListUrl.includes('hb.afl.rakuten.co.jp') &&
-               !isImageApiUrl(rakutenHotel.planListUrl)) {
-      // planListUrlも検証・修正
-      affiliateUrl = AFF_ID ? validateAffiliateTargetUrl(rakutenHotel.planListUrl, hotelId, AFF_ID) : rakutenHotel.planListUrl;
-    } else if (AFF_ID) {
-      // 環境変数でhb.aflリンクを生成（二重エンコード防止）
-      affiliateUrl = buildAffiliate(safeTargetUrl, AFF_ID);
-    } else {
-      // フォールバック：安全な直接リンク
-      affiliateUrl = safeTargetUrl;
+  // 統一されたリンク生成ロジック
+  const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
+  
+  // 1) まず候補ターゲットを決定：hotelAffiliateUrl?.pc || planListUrl || hotelInformationUrl
+  let candidateTarget = '';
+  
+  // hotelAffiliateUrlのpc=パラメータから抽出
+  if (rakutenHotel.hotelAffiliateUrl && rakutenHotel.hotelAffiliateUrl.includes('hb.afl.rakuten.co.jp')) {
+    try {
+      const urlObj = new URL(rakutenHotel.hotelAffiliateUrl);
+      const pcParam = urlObj.searchParams.get('pc');
+      if (pcParam) {
+        candidateTarget = decodeURIComponent(pcParam);
+      }
+    } catch {
+      // URL解析エラーは無視
     }
-    // rawModeでは safeHotelLink を通さない
+  }
+  
+  // 候補が見つからない場合は他のURLを試す
+  if (!candidateTarget) {
+    candidateTarget = rakutenHotel.planListUrl || rakutenHotel.hotelInformationUrl || '';
+  }
+  
+  // 2) target が画像API or hotelId 抽出失敗 → 次の候補、最後はsafeTargetUrl
+  let finalTarget = candidateTarget;
+  
+  if (isImageApiUrl(candidateTarget) || !extractHotelId(candidateTarget)) {
+    console.warn(`🔗 無効なターゲット検出: ${candidateTarget}, 正規URLに変更`);
+    finalTarget = safeTargetUrl;
   } else {
-    // 【通常モード】：アフィリエイト化
-    const AFF_ID = process.env.RAKUTEN_AFFILIATE_ID;
-    
-    // 1. APIからhb.aflアフィリエイトリンクを最優先で使用（画像API除外、ターゲット検証）
-    if (rakutenHotel.hotelAffiliateUrl && 
-        rakutenHotel.hotelAffiliateUrl.includes('hb.afl.rakuten.co.jp') &&
-        !isImageApiUrl(rakutenHotel.hotelAffiliateUrl)) {
-      affiliateUrl = AFF_ID ? validateAffiliateTargetUrl(rakutenHotel.hotelAffiliateUrl, hotelId, AFF_ID) : rakutenHotel.hotelAffiliateUrl;
-    }
-    // 2. planListUrlがhb.aflリンクの場合も使用（画像API除外、ターゲット検証）
-    else if (rakutenHotel.planListUrl && 
-             rakutenHotel.planListUrl.includes('hb.afl.rakuten.co.jp') &&
-             !isImageApiUrl(rakutenHotel.planListUrl)) {
-      affiliateUrl = AFF_ID ? validateAffiliateTargetUrl(rakutenHotel.planListUrl, hotelId, AFF_ID) : rakutenHotel.planListUrl;
-    }
-    // 3. 環境変数があれば必ずhb.aflリンクを生成（二重エンコード防止）
-    else if (AFF_ID) {
-      affiliateUrl = buildAffiliate(safeTargetUrl, AFF_ID);
-    }
-    // 4. 環境変数未設定時のみ直接リンク（フォールバック）
-    else {
-      affiliateUrl = safeTargetUrl;
-    }
-    
-    // hb.aflリンクの場合はsafeHotelLinkを通さない（アフィリエイトリンクを保持）
-    if (!affiliateUrl.includes('hb.afl.rakuten.co.jp')) {
-      // 最終安全性チェック（許可ドメイン以外は修正）
-      affiliateUrl = safeHotelLink(affiliateUrl, rakutenHotel.hotelNo, {
-        hotelAffiliateUrl: rakutenHotel.hotelAffiliateUrl,
-        hotelInformationUrl: rakutenHotel.hotelInformationUrl
-      });
+    // 有効なターゲットをホテル詳細URLに正規化
+    finalTarget = normalizeTargetToHotelDetail(candidateTarget, hotelId);
+  }
+  
+  // 3) アフィリエイトID有無でリンク生成
+  if (AFF_ID) {
+    affiliateUrl = buildAffiliateUrl(finalTarget, AFF_ID);
+  } else {
+    affiliateUrl = finalTarget;
+  }
+  
+  // 4) 最終バリデート（hb.aflの場合のみ、rawModeでも適用）
+  if (AFF_ID && affiliateUrl.includes('hb.afl.rakuten.co.jp')) {
+    const validation = validateAffiliateTargetUrl(affiliateUrl);
+    if (!validation.isValid) {
+      console.warn(`🔗 最終バリデート失敗: ${validation.reason}, 再生成中...`);
+      affiliateUrl = buildAffiliateUrl(safeTargetUrl, AFF_ID);
     }
   }
   

@@ -13,8 +13,8 @@ interface HotelCardProps {
 }
 
 export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }: HotelCardProps) {
-  // デバッグ設定（環境変数制御）
-  const isDebugMode = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_LINKS_UI === 'true';
+  // デバッグ設定（環境変数制御・本番では無効）
+  const isDebugMode = process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_LINKS_UI === 'true';
   
   // アフィリエイトURL診断
   const inspectAffiliateUrl = (url: string) => {
