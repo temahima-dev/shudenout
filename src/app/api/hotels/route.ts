@@ -2,6 +2,73 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchHotels } from "@/lib/providers/rakuten";
 import { HOTELS } from "@/app/data/hotels";
 import { filterQualityHotels } from "@/lib/filters/quality";
+import { Hotel } from "@/app/data/hotels";
+
+// アフィリエイトURL診断用の解析関数
+function inspectAffiliateUrl(affiliateUrl: string) {
+  try {
+    const urlObj = new URL(affiliateUrl);
+    const isHBAFL = urlObj.hostname === 'hb.afl.rakuten.co.jp';
+    
+    if (!isHBAFL) {
+      return {
+        isHBAFL: false,
+        pcRaw: '',
+        pcDecoded: '',
+        hasDoubleEncode: false,
+        pcHost: urlObj.hostname,
+        isTravelHost: urlObj.hostname === 'travel.rakuten.co.jp' || urlObj.hostname === 'hotel.travel.rakuten.co.jp'
+      };
+    }
+    
+    const pcRaw = urlObj.searchParams.get('pc') || '';
+    const pcDecoded = pcRaw ? decodeURIComponent(pcRaw) : '';
+    const hasDoubleEncode = /%25[0-9A-Fa-f]{2}/.test(pcRaw);
+    
+    let pcHost = '';
+    let isTravelHost = false;
+    
+    if (pcDecoded) {
+      try {
+        const pcUrlObj = new URL(pcDecoded);
+        pcHost = pcUrlObj.hostname;
+        isTravelHost = pcHost === 'travel.rakuten.co.jp' || pcHost === 'hotel.travel.rakuten.co.jp';
+      } catch {
+        // pc先URLの解析に失敗した場合
+        pcHost = 'invalid-url';
+      }
+    }
+    
+    return {
+      isHBAFL: true,
+      pcRaw,
+      pcDecoded,
+      hasDoubleEncode,
+      pcHost,
+      isTravelHost
+    };
+  } catch {
+    return {
+      isHBAFL: false,
+      pcRaw: '',
+      pcDecoded: '',
+      hasDoubleEncode: false,
+      pcHost: 'invalid-url',
+      isTravelHost: false
+    };
+  }
+}
+
+// ホテル配列に診断情報を追加する
+function addInspectionData(hotels: Hotel[]) {
+  return hotels.slice(0, 10).map(hotel => ({
+    ...hotel,
+    inspection: {
+      affiliateUrl: hotel.affiliateUrl,
+      parsed: inspectAffiliateUrl(hotel.affiliateUrl)
+    }
+  }));
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,6 +86,9 @@ export async function GET(request: NextRequest) {
     
     // 生リンクモード（raw=1の時のみ）
     const rawMode = searchParams.get("raw") === "1";
+    
+    // 診断モード（inspect=1の時のみ）
+    const inspectMode = searchParams.get("inspect") === "1";
     
     // URLパラメータを取得
     const area = searchParams.get("area") || undefined;
@@ -90,11 +160,15 @@ export async function GET(request: NextRequest) {
           ts: new Date().toISOString()
         } : undefined;
         
+        // 診断モードの場合は診断情報を追加
+        const responseHotels = inspectMode ? addInspectionData(filteredMockData) : filteredMockData;
+        
         return NextResponse.json(
           { 
-            hotels: filteredMockData, 
+            hotels: responseHotels, 
             success: true,
             isSample: false, // 200で空配列でも isSample=false（接続OK・結果0件）
+            ...(inspectMode && { inspect: true }), // 診断モード表示
             ...(debug && { debug })
           },
           { 
@@ -117,12 +191,16 @@ export async function GET(request: NextRequest) {
         ts: new Date().toISOString()
       } : undefined;
 
-              return NextResponse.json(
+              // 診断モードの場合は診断情報を追加
+        const responseHotels = inspectMode ? addInspectionData(qualityFilteredItems) : qualityFilteredItems;
+        
+        return NextResponse.json(
           { 
-            hotels: qualityFilteredItems, 
+            hotels: responseHotels, 
             success: true,
             isSample: false, // fetch 成功時は false
             mode: rawMode ? "raw" : "normal", // モード情報を追加
+            ...(inspectMode && { inspect: true }), // 診断モード表示
             ...(debug && { debug })
           },
           { 
@@ -177,11 +255,15 @@ export async function GET(request: NextRequest) {
         ts: new Date().toISOString()
       } : undefined;
       
+      // 診断モードの場合は診断情報を追加
+      const responseHotels = inspectMode ? addInspectionData(filteredMockData) : filteredMockData;
+      
       return NextResponse.json(
         { 
-          hotels: filteredMockData, 
+          hotels: responseHotels, 
           success: true,
           isSample: true, // fetch 失敗時のみ true
+          ...(inspectMode && { inspect: true }), // 診断モード表示
           ...(debug && { debug })
         },
         { 

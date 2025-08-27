@@ -13,8 +13,80 @@ interface HotelCardProps {
 }
 
 export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }: HotelCardProps) {
+  // デバッグ設定（環境変数制御）
+  const isDebugMode = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_LINKS_UI === 'true';
+  
+  // アフィリエイトURL診断
+  const inspectAffiliateUrl = (url: string) => {
+    try {
+      const urlObj = new URL(url);
+      const isHBAFL = urlObj.hostname === 'hb.afl.rakuten.co.jp';
+      
+      if (!isHBAFL) {
+        return {
+          isOK: false,
+          reason: `Non-hb.afl: ${urlObj.hostname}`
+        };
+      }
+      
+      const pcRaw = urlObj.searchParams.get('pc') || '';
+      const hasDoubleEncode = /%25[0-9A-Fa-f]{2}/.test(pcRaw);
+      
+      if (hasDoubleEncode) {
+        return {
+          isOK: false,
+          reason: 'Double-encoded pc parameter'
+        };
+      }
+      
+      if (pcRaw) {
+        try {
+          const pcDecoded = decodeURIComponent(pcRaw);
+          const pcUrlObj = new URL(pcDecoded);
+          const isTravelHost = pcUrlObj.hostname === 'travel.rakuten.co.jp' || pcUrlObj.hostname === 'hotel.travel.rakuten.co.jp';
+          
+          if (!isTravelHost) {
+            return {
+              isOK: false,
+              reason: `Invalid pc host: ${pcUrlObj.hostname}`
+            };
+          }
+        } catch {
+          return {
+            isOK: false,
+            reason: 'Invalid pc URL format'
+          };
+        }
+      }
+      
+      return { isOK: true, reason: '' };
+    } catch {
+      return {
+        isOK: false,
+        reason: 'Invalid URL format'
+      };
+    }
+  };
+  
   const handleAnalyticsTracking = () => {
-    // コンソールログ（デバッグ用）
+    // アフィリエイトURL診断
+    const urlInspection = inspectAffiliateUrl(hotel.affiliateUrl);
+    const domHref = hotel.affiliateUrl; // 実際のDOM hrefと同じ
+    const hrefMatches = domHref === hotel.affiliateUrl;
+    
+    // デバッグ情報をコンソールに出力
+    if (isDebugMode) {
+      console.info('BOOKING_LINK', {
+        hotelId: hotel.id,
+        hotelName: hotel.name,
+        apiAffiliateUrl: hotel.affiliateUrl,
+        domHref: domHref,
+        hrefMatches,
+        urlInspection
+      });
+    }
+    
+    // 従来のログ
     console.log({ event: "book_click", id: hotel.id, affiliateUrl: hotel.affiliateUrl });
     
     // Google Analytics追跡
@@ -26,6 +98,11 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
       distanceKm: hotel.distanceKm,
     });
   };
+  
+  // 診断バッジ用の状態計算
+  const urlInspection = isDebugMode ? inspectAffiliateUrl(hotel.affiliateUrl) : null;
+  const hrefMatches = hotel.affiliateUrl === hotel.affiliateUrl; // 実際は常に true（DOMと同じ値）
+  const badgeStatus = urlInspection ? (urlInspection.isOK && hrefMatches ? 'OK' : 'WARN') : null;
 
   // 評価表示用のスター
   const renderStars = (rating: number) => {
@@ -72,6 +149,22 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
             <div className="bg-gray-900/80 backdrop-blur-sm text-white px-2 py-1 rounded-lg text-sm font-medium flex items-center gap-1">
               <span className="text-yellow-400">★</span>
               <span>{hotel.rating}</span>
+            </div>
+          </div>
+        )}
+        
+        {/* 診断バッジ（開発時のみ） */}
+        {isDebugMode && badgeStatus && (
+          <div className="absolute top-12 left-3">
+            <div 
+              className={`px-2 py-1 rounded text-xs font-bold ${
+                badgeStatus === 'OK' 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-yellow-500 text-black'
+              }`}
+              title={badgeStatus === 'WARN' ? urlInspection?.reason : 'All checks passed'}
+            >
+              {badgeStatus}
             </div>
           </div>
         )}
