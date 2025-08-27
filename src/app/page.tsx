@@ -635,16 +635,16 @@ function HomeContent() {
           </div>
 
           {/* 現在地から探すセクション */}
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-xl border border-green-100 shadow-sm">
-            <div className="flex justify-center space-x-2">
+          <div className="py-4">
+            <div className="flex justify-center space-x-3">
               <button
                 onClick={handleGetCurrentLocation}
                 disabled={isGettingLocation || useCurrentLocation}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm min-w-[160px]"
+                className="px-8 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg text-lg min-w-[200px]"
               >
                 {isGettingLocation ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                     <span>取得中...</span>
                   </>
                 ) : useCurrentLocation ? (
@@ -668,7 +668,7 @@ function HomeContent() {
                     setCurrentLocation(null);
                     handleAreaChange("全て");
                   }}
-                  className="px-3 py-3 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center"
+                  className="px-4 py-4 bg-gray-500 text-white font-semibold rounded-xl hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center shadow-lg text-lg"
                   title="現在地検索を解除"
                 >
                   ✕
@@ -678,7 +678,7 @@ function HomeContent() {
             
             {/* ステータス表示 */}
             {useCurrentLocation && currentLocation && (
-              <div className="mt-3 p-2 bg-green-100 rounded-lg">
+              <div className="mt-4 p-3 bg-green-100 rounded-lg">
                 <p className="text-sm text-green-700 flex items-center justify-center">
                   ✅ 現在地周辺のホテルを表示中 (半径2km以内)
                 </p>
@@ -686,7 +686,7 @@ function HomeContent() {
             )}
             
             {isGettingLocation && (
-              <div className="mt-3 p-2 bg-blue-100 rounded-lg">
+              <div className="mt-4 p-3 bg-blue-100 rounded-lg">
                 <p className="text-sm text-blue-700 flex items-center justify-center">
                   📍 位置情報を取得中...しばらくお待ちください
                 </p>
