@@ -252,7 +252,9 @@ function transformRakutenHotel(
     finalUrl: linkResult.finalUrl,
     validation: validation.isValid ? '✅ Valid' : `❌ ${validation.reason}`,
     usedSource: linkResult.debug.usedSource,
-    hasAffiliate: linkResult.debug.hasAffiliate
+    hasAffiliate: linkResult.debug.hasAffiliate,
+    hasTrailingSlash: linkResult.debug.hasTrailingSlash,
+    isDoubleEncoded: linkResult.debug.isDoubleEncoded
   });
 
   return {
@@ -271,34 +273,40 @@ function transformRakutenHotel(
   };
 }
 
-// フォールバック用のサンプルデータ生成
+// API失敗時のサンプルデータ生成（本番ではダミーID除外）
 function generateFallbackHotels(
   area: string, 
-  count: number = 3,
+  count: number = 2,
   options?: { checkinDate: string; checkoutDate: string; adultNum: number }
 ): Hotel[] {
+  // 本番環境では空配列を返す（ダミーデータ非表示）
+  if (process.env.NODE_ENV === 'production') {
+    console.log('⚠️ Production mode: No fallback hotels returned');
+    return [];
+  }
+  
   const fallbackHotels: Hotel[] = [];
   
   for (let i = 1; i <= count; i++) {
-    const hotelId = `99999${i.toString().padStart(2, '0')}`;
+    const hotelId = `DEV99${i.toString().padStart(3, '0')}`;
     
     // サンプルリンクを生成
     let affiliateUrl = 'https://travel.rakuten.co.jp/';
     if (options) {
-      affiliateUrl = generateSampleHotelLink(hotelId, `${area} フォールバックホテル ${i}`, options);
+      affiliateUrl = generateSampleHotelLink(hotelId, `[開発用] ${area} サンプルホテル ${i}`, options);
     }
     
     fallbackHotels.push({
       id: hotelId,
-      name: `${area} フォールバックホテル ${i}`,
-      price: 4000 + Math.floor(Math.random() * 4000),
-      rating: 3.8 + Math.random() * 1.0,
+      name: `[開発用] ${area} サンプルホテル ${i}`,
+      price: 3000 + Math.floor(Math.random() * 5000),
+      rating: 3.5 + Math.random() * 1.5,
       imageUrl: '/placeholder-hotel.jpg',
       affiliateUrl,
       area,
       nearest: `${area}駅`,
       amenities: ['WiFi', 'シャワー', '2人可'],
-      isSameDayAvailable: true
+      isSameDayAvailable: false // サンプルデータは空室確認済みではない
     });
   }
   
@@ -364,44 +372,67 @@ export async function GET(request: NextRequest) {
     let apiError: string | undefined;
     let upstreamDebug: any = undefined;
 
-    // 楽天VacantHotelSearch API呼び出し
-    const result = await fetchVacantHotels({
-      checkinDate: today,
-      checkoutDate: tomorrow,
-      adultNum,
-      roomNum: 1,
-      lat: searchLat,
-      lng: searchLng,
-      searchRadius: radiusKm,
-      minCharge,
-      maxCharge
-    }, isInspectMode);
-
-    apiSuccess = result.success;
-    apiError = result.error;
-    upstreamDebug = result.upstream;
-
-    if (result.success && result.data.hotels && result.data.hotels.length > 0) {
-      console.log(`✅ VacantHotelSearch API成功: ${result.data.hotels.length}件`);
+    // 楽天APP_IDが設定されているかチェック
+    const rakutenAppId = process.env.RAKUTEN_APP_ID;
+    
+    if (!rakutenAppId) {
+      console.error('❌ RAKUTEN_APP_ID not configured');
+      apiSuccess = false;
+      apiError = 'RAKUTEN_APP_ID not configured';
+      isVacantData = false;
       
-      hotels = result.data.hotels.map(hotelData => 
-        transformRakutenHotel(hotelData, areaName, {
-          checkinDate: today,
-          checkoutDate: tomorrow,
-          adultNum
-        })
-      );
-      isVacantData = true;
-    } else {
-      console.log('⚠️ VacantHotelSearch API: 空室ホテルが見つからないか、APIエラー');
-      
-      // 失敗時のみフォールバックデータを使用
-      hotels = generateFallbackHotels(areaName, 3, {
+      // 開発環境のみフォールバックデータを返す
+      hotels = generateFallbackHotels(areaName, 2, {
         checkinDate: today,
         checkoutDate: tomorrow,
         adultNum
       });
-      isVacantData = false;
+    } else {
+      // 楽天VacantHotelSearch API呼び出し（必須実行）
+      console.log('🔍 Calling VacantHotelSearch API (sameDay=1 equivalent)...');
+      
+      const result = await fetchVacantHotels({
+        checkinDate: today,
+        checkoutDate: tomorrow,
+        adultNum,
+        roomNum: 1,
+        lat: searchLat,
+        lng: searchLng,
+        searchRadius: radiusKm,
+        minCharge,
+        maxCharge
+      }, isInspectMode);
+
+      apiSuccess = result.success;
+      apiError = result.error;
+      upstreamDebug = result.upstream;
+
+      if (result.success && result.data.hotels && result.data.hotels.length > 0) {
+        console.log(`✅ VacantHotelSearch API成功: ${result.data.hotels.length}件`);
+        
+        hotels = result.data.hotels.map(hotelData => 
+          transformRakutenHotel(hotelData, areaName, {
+            checkinDate: today,
+            checkoutDate: tomorrow,
+            adultNum
+          })
+        );
+        isVacantData = true;
+      } else if (result.success && (!result.data.hotels || result.data.hotels.length === 0)) {
+        // API成功だが0件の場合：空室なしとして空配列を返す（サンプルデータは使わない）
+        console.log('ℹ️ VacantHotelSearch API成功: 空室ホテル0件');
+        hotels = [];
+        isVacantData = true; // API自体は成功
+      } else {
+        // API失敗またはエラーレスポンスの場合のみフォールバック
+        console.error(`❌ VacantHotelSearch API失敗: ${apiError}`);
+        hotels = generateFallbackHotels(areaName, 2, {
+          checkinDate: today,
+          checkoutDate: tomorrow,
+          adultNum
+        });
+        isVacantData = false;
+      }
     }
 
     // 設備フィルタを適用
@@ -429,13 +460,15 @@ export async function GET(request: NextRequest) {
         checkinDate: today,
         checkoutDate: tomorrow,
         adultNum,
-        isVacantSearch: isVacantData
+        isVacantSearch: true // 常にVacantHotelSearch使用を明示
       },
       message: isVacantData 
-        ? `${hotels.length}件の空室ありホテルが見つかりました` 
-        : hotels.length === 0 
-          ? '申し訳ございません。現在、空室が確認できるホテルがありません。しばらく経ってから再度お試しください。'
-          : 'APIエラーのためサンプルデータを表示しています',
+        ? hotels.length > 0 
+          ? `${hotels.length}件の空室ありホテルが見つかりました` 
+          : '申し訳ございません。本日は空室のあるホテルがありません。時間をおいて再度お試しください。'
+        : process.env.NODE_ENV === 'production'
+          ? '申し訳ございません。現在、ホテル検索サービスが利用できません。しばらく経ってから再度お試しください。'
+          : 'APIエラーのため開発用サンプルデータを表示しています',
       debug: process.env.NODE_ENV === 'development' ? {
         hasAppId: !!process.env.RAKUTEN_APP_ID,
         success: apiSuccess,
@@ -445,7 +478,14 @@ export async function GET(request: NextRequest) {
           id: hotel.id,
           name: hotel.name,
           affiliateUrl: hotel.affiliateUrl,
-          finalHrefSample: hotel.affiliateUrl
+          finalHrefSample: hotel.affiliateUrl,
+          linkAnalysis: {
+            isAffiliateLink: hotel.affiliateUrl.includes('hb.afl.rakuten.co.jp'),
+            hasTrailingSlash: hotel.affiliateUrl.includes('hgc/') && hotel.affiliateUrl.includes('/?pc='),
+            isHotelDetailUrl: hotel.affiliateUrl.includes('travel.rakuten.co.jp/HOTEL/') || 
+                             (hotel.affiliateUrl.includes('pc=') && 
+                              decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').includes('travel.rakuten.co.jp/HOTEL/'))
+          }
         })),
         upstream: upstreamDebug
       } : undefined

@@ -74,35 +74,78 @@ function generateDirectHotelUrl(hotelId: string, options: LinkGenerationOptions)
 }
 
 /**
- * アフィリエイトリンクに変換（2重エンコード防止）
+ * アフィリエイトリンクを構築（最終固定版）
+ * 必ず `/hgc/${affId}/?pc=` 形式でアフィリエイトIDの後にスラッシュを含める
+ */
+function buildAffiliateUrl(targetUrl: string, affId: string): string {
+  try {
+    // 既存のhb.aflリンクをチェック（正規形式でない場合は再生成）
+    if (targetUrl.includes('hb.afl.rakuten.co.jp')) {
+      const urlObj = new URL(targetUrl);
+      const pcParam = urlObj.searchParams.get('pc');
+      
+      // pc パラメータからデコードした結果がtravel.rakuten.co.jpでない場合は再生成
+      if (pcParam) {
+        try {
+          const decodedPc = decodeURIComponent(pcParam);
+          if (decodedPc.includes('travel.rakuten.co.jp/HOTEL/')) {
+            // 正規形式かチェック（trailing slash確認）
+            const pathMatch = urlObj.pathname.match(/\/hgc\/([^\/]+)\/$/);
+            if (pathMatch && pathMatch[1] === affId) {
+              console.log('✅ Already properly formatted affiliate link:', targetUrl);
+              return targetUrl;
+            }
+          }
+        } catch (decodeError) {
+          console.warn('Failed to decode pc parameter, regenerating:', decodeError);
+        }
+      }
+      
+      // 不正形式の場合は再生成のため targetUrl をデコード
+      if (pcParam) {
+        try {
+          targetUrl = decodeURIComponent(pcParam);
+        } catch (decodeError) {
+          console.warn('Cannot decode existing pc parameter:', decodeError);
+        }
+      }
+    }
+
+    // ホテル詳細URLに正規化
+    if (!targetUrl.includes('travel.rakuten.co.jp/HOTEL/')) {
+      console.warn('⚠️ Non-hotel URL detected, skipping affiliate conversion:', targetUrl);
+      return targetUrl;
+    }
+
+    // 1回だけエンコード
+    const encodedUrl = encodeURIComponent(targetUrl);
+    // 必ずtrailing slashを含める
+    const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${affId}/?pc=${encodedUrl}`;
+    
+    console.log('🔗 Building affiliate link:', {
+      original: targetUrl,
+      encoded: encodedUrl,
+      affiliate: affiliateUrl,
+      hasTrailingSlash: true,
+      isDoubleEncoded: false
+    });
+    
+    return affiliateUrl;
+  } catch (error) {
+    console.error('❌ Failed to build affiliate link:', error);
+    return targetUrl;
+  }
+}
+
+/**
+ * アフィリエイトリンクに変換（buildAffiliateUrlのラッパー）
  */
 function convertToAffiliateLink(directUrl: string, affiliateId?: string): string {
   if (!affiliateId) {
     return directUrl;
   }
 
-  try {
-    // 既にhb.afl.rakuten.co.jpの場合はそのまま返す
-    if (directUrl.includes('hb.afl.rakuten.co.jp')) {
-      console.log('Already affiliate link, returning as-is:', directUrl);
-      return directUrl;
-    }
-
-    // エンコードは1回のみ適用
-    const encodedUrl = encodeURIComponent(directUrl);
-    const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${affiliateId}?pc=${encodedUrl}`;
-    
-    console.log('Converting to affiliate link:', {
-      original: directUrl,
-      encoded: encodedUrl,
-      affiliate: affiliateUrl
-    });
-    
-    return affiliateUrl;
-  } catch (error) {
-    console.warn('Failed to convert to affiliate link:', error);
-    return directUrl;
-  }
+  return buildAffiliateUrl(directUrl, affiliateId);
 }
 
 /**
@@ -135,8 +178,8 @@ function addSearchParams(url: string, options: LinkGenerationOptions): string {
 }
 
 /**
- * 楽天ホテルリンクを生成
- * 優先順位: hotelAffiliateUrl.pc > hotelInformationUrl/planListUrl (直接利用) > ID抽出生成 (fallback)
+ * 楽天ホテルリンクを生成（ホテル詳細URLのみ使用・最終版）
+ * 優先順位: ホテルID抽出→詳細URL生成 > hotelInformationUrl（詳細URLのみ） > 緊急フォールバック
  */
 export function generateRakutenHotelLink(
   hotelInfo: HotelBasicInfo,
@@ -151,113 +194,104 @@ export function generateRakutenHotelLink(
     usedSource: string;
     hasAffiliate: boolean;
     extractedId?: string;
+    hasTrailingSlash?: boolean;
+    isDoubleEncoded?: boolean;
   };
 } {
   const affiliateId = options.affiliateId || process.env.RAKUTEN_AFFILIATE_ID;
 
-  // 1. hotelAffiliateUrl.pc が存在する場合はそれを最優先で使用
-  if (hotelInfo.hotelAffiliateUrl?.pc) {
-    const sourceUrl = hotelInfo.hotelAffiliateUrl.pc;
-    console.log('✅ Using hotelAffiliateUrl.pc:', sourceUrl);
+  // 1. hotelNo（楽天ホテルID）からホテル詳細URLを直接生成（最優先）
+  if (hotelInfo.hotelNo) {
+    const hotelId = hotelInfo.hotelNo.toString();
+    const directUrl = `https://travel.rakuten.co.jp/HOTEL/${hotelId}/${hotelId}.html`;
+    const finalUrl = convertToAffiliateLink(directUrl, affiliateId);
+    
+    console.log('✅ Using hotelNo for hotel detail URL:', {
+      hotelNo: hotelInfo.hotelNo,
+      directUrl,
+      finalUrl,
+      hasAffiliate: !!affiliateId
+    });
+
+      return {
+      finalUrl,
+      source: 'direct',
+      debug: {
+        sourceUrl: `hotelNo: ${hotelInfo.hotelNo}`,
+        finalUrl,
+        status: 'direct',
+        usedSource: 'hotelNo → hotel detail URL',
+        hasAffiliate: !!affiliateId,
+        extractedId: hotelId,
+        hasTrailingSlash: finalUrl.includes('hgc/') && finalUrl.includes('/?pc='),
+        isDoubleEncoded: false
+      }
+    };
+  }
+
+  // 2. hotelInformationUrl からID抽出（ホテル詳細URLのみ許可）
+  const hotelId = extractHotelId(hotelInfo.hotelInformationUrl || '');
+  if (hotelId && hotelInfo.hotelInformationUrl?.includes('travel.rakuten.co.jp/HOTEL/')) {
+    const sourceUrl = hotelInfo.hotelInformationUrl;
+    // パラメータは付けずにホテル詳細URLのみ使用
+    const directUrl = `https://travel.rakuten.co.jp/HOTEL/${hotelId}/${hotelId}.html`;
+    const finalUrl = convertToAffiliateLink(directUrl, affiliateId);
+    
+    console.log('✅ Using hotelInformationUrl → hotel detail URL:', {
+      sourceUrl,
+      extractedId: hotelId,
+      directUrl,
+      finalUrl,
+      hasAffiliate: !!affiliateId
+    });
     
     return {
-      finalUrl: sourceUrl,
+      finalUrl,
+      source: 'direct',
+      debug: {
+        sourceUrl,
+        finalUrl,
+        status: 'direct',
+        usedSource: 'hotelInformationUrl → hotel detail URL',
+        hasAffiliate: !!affiliateId,
+        extractedId: hotelId,
+        hasTrailingSlash: finalUrl.includes('hgc/') && finalUrl.includes('/?pc='),
+        isDoubleEncoded: false
+      }
+    };
+  }
+
+  // 3. 既存のhb.aflリンクの再構築（正規化）
+  if (hotelInfo.hotelAffiliateUrl?.pc && hotelInfo.hotelAffiliateUrl.pc.includes('hb.afl.rakuten.co.jp')) {
+    const sourceUrl = hotelInfo.hotelAffiliateUrl.pc;
+    const finalUrl = convertToAffiliateLink(sourceUrl, affiliateId);
+    
+    console.log('🔄 Rebuilding existing affiliate link:', {
+      sourceUrl,
+      finalUrl,
+      hasAffiliate: !!affiliateId
+    });
+
+    return {
+      finalUrl,
       source: 'affiliate',
       debug: {
         sourceUrl,
-        finalUrl: sourceUrl,
-        status: 'affiliate',
-        usedSource: 'hotelAffiliateUrl.pc',
-        hasAffiliate: !!affiliateId
-      }
-    };
-  }
-
-  // 2. hotelInformationUrl を直接利用（パラメータ付与）
-  if (hotelInfo.hotelInformationUrl) {
-    const sourceUrl = hotelInfo.hotelInformationUrl;
-    const directUrl = addSearchParams(sourceUrl, options);
-    const finalUrl = convertToAffiliateLink(directUrl, affiliateId);
-    
-    console.log('✅ Using hotelInformationUrl directly:', {
-      sourceUrl,
-      directUrl,
-      finalUrl,
-      hasAffiliate: !!affiliateId
-    });
-
-    return {
-      finalUrl,
-      source: 'direct',
-      debug: {
-        sourceUrl,
         finalUrl,
-        status: 'direct',
-        usedSource: 'hotelInformationUrl (direct)',
-        hasAffiliate: !!affiliateId
-      }
-    };
-  }
-
-  // 3. planListUrl を直接利用（dpPlanListUrl > planListUrl の優先順位）
-  const planUrl = hotelInfo.dpPlanListUrl || hotelInfo.planListUrl;
-  if (planUrl) {
-    const sourceUrl = planUrl;
-    const directUrl = addSearchParams(sourceUrl, options);
-    const finalUrl = convertToAffiliateLink(directUrl, affiliateId);
-    
-    console.log('✅ Using planListUrl directly:', {
-      sourceUrl,
-      directUrl,
-      finalUrl,
-      hasAffiliate: !!affiliateId
-    });
-
-    return {
-      finalUrl,
-      source: 'direct',
-      debug: {
-        sourceUrl,
-        finalUrl,
-        status: 'direct',
-        usedSource: hotelInfo.dpPlanListUrl ? 'dpPlanListUrl (direct)' : 'planListUrl (direct)',
-        hasAffiliate: !!affiliateId
-      }
-    };
-  }
-
-  // 4. fallback: ホテルIDを抽出してURL生成（404リスクあり）
-  const hotelId = extractHotelId(hotelInfo.hotelInformationUrl || '');
-  if (hotelId) {
-    const directUrl = generateDirectHotelUrl(hotelId, options);
-    const finalUrl = convertToAffiliateLink(directUrl, affiliateId);
-    
-    console.warn('⚠️ Using fallback ID-based URL generation (404 risk):', {
-      hotelId,
-      directUrl,
-      finalUrl,
-      hasAffiliate: !!affiliateId
-    });
-
-    return {
-      finalUrl,
-      source: 'fallback',
-      debug: {
-        sourceUrl: hotelInfo.hotelInformationUrl || '',
-        finalUrl,
-        status: 'fallback',
-        usedSource: `ID extraction fallback (${hotelId})`,
+        status: 'affiliate_rebuilt',
+        usedSource: 'hotelAffiliateUrl.pc (rebuilt)',
         hasAffiliate: !!affiliateId,
-        extractedId: hotelId
+        hasTrailingSlash: finalUrl.includes('hgc/') && finalUrl.includes('/?pc='),
+        isDoubleEncoded: false
       }
     };
   }
 
-  // 5. 最終フォールバック: 楽天トラベルトップページ
+  // 4. 緊急フォールバック: 楽天トラベルトップページ
   const fallbackUrl = 'https://travel.rakuten.co.jp/';
   const finalUrl = convertToAffiliateLink(fallbackUrl, affiliateId);
   
-  console.error('❌ No valid URL found, using rakuten travel top page');
+  console.error('❌ No valid hotel URL found, using rakuten travel top page');
 
   return {
     finalUrl,
@@ -267,7 +301,9 @@ export function generateRakutenHotelLink(
       finalUrl,
       status: 'emergency_fallback',
       usedSource: 'travel.rakuten.co.jp (emergency)',
-      hasAffiliate: !!affiliateId
+      hasAffiliate: !!affiliateId,
+      hasTrailingSlash: finalUrl.includes('hgc/') && finalUrl.includes('/?pc='),
+      isDoubleEncoded: false
     }
   };
 }
@@ -308,14 +344,14 @@ export function validateRakutenLink(url: string): {
           const pcHostname = pcUrlObj.hostname;
           
           if (pcHostname !== 'travel.rakuten.co.jp' && pcHostname !== 'hotel.travel.rakuten.co.jp') {
-            return {
+    return {
               isValid: false,
               isRakutenTravel: false,
               isAffiliate: true,
               reason: `Invalid pc parameter hostname: ${pcHostname}`
             };
           }
-        } catch (error) {
+  } catch (error) {
           return {
             isValid: false,
             isRakutenTravel: false,
