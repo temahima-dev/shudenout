@@ -2,6 +2,27 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Environment Variables
+
+Create a `.env.local` file in the root directory with the following variables:
+
+```bash
+# 楽天Developer API設定
+RAKUTEN_APP_ID=your_rakuten_app_id_here
+RAKUTEN_AFFILIATE_ID=your_rakuten_affiliate_id_here  # Optional for affiliate links
+
+# サイトURL (本番用)
+NEXT_PUBLIC_SITE_URL=https://shudenout.vercel.app
+
+# Google Analytics (オプション)
+NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
+
+# デバッグモード (開発環境のみ)
+NEXT_PUBLIC_DEBUG_LINKS_UI=true
+```
+
+### Development Server
+
 First, run the development server:
 
 ```bash

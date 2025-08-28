@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateRakutenHotelLink, generateSampleHotelLink, validateRakutenLink } from '@/lib/providers/rakuten';
 
 // 簡単な日付取得関数
 function getTodayTomorrowJST(): { today: string; tomorrow: string } {
@@ -169,7 +170,11 @@ async function fetchVacantHotels(params: {
 }
 
 // 楽天レスポンスをHotel型に変換
-function transformRakutenHotel(rakutenHotel: any, area: string = 'その他'): Hotel {
+function transformRakutenHotel(
+  rakutenHotel: any, 
+  area: string = 'その他',
+  options: { checkinDate: string; checkoutDate: string; adultNum: number }
+): Hotel {
   const hotelInfo = rakutenHotel.hotel[0].hotelBasicInfo;
   
   // 設備推定（実際のAPIでは詳細設備情報が限定的）
@@ -184,13 +189,32 @@ function transformRakutenHotel(rakutenHotel: any, area: string = 'その他'): H
   }
   amenities.push('2人可'); // 空室検索結果なので基本的に利用可能
 
+  // 適切なホテルリンクを生成
+  const linkResult = generateRakutenHotelLink(hotelInfo, {
+    checkinDate: options.checkinDate,
+    checkoutDate: options.checkoutDate,
+    adultNum: options.adultNum,
+    roomNum: 1
+  });
+
+  // リンクの有効性を検証
+  const validation = validateRakutenLink(linkResult.finalUrl);
+  
+  console.log(`Hotel ${hotelInfo.hotelNo} link generation:`, {
+    name: hotelInfo.hotelName,
+    source: linkResult.source,
+    finalUrl: linkResult.finalUrl,
+    validation,
+    debug: linkResult.debug
+  });
+
   return {
     id: hotelInfo.hotelNo.toString(),
     name: hotelInfo.hotelName,
     price: hotelInfo.hotelMinCharge,
     rating: hotelInfo.reviewAverage > 0 ? hotelInfo.reviewAverage : undefined,
     imageUrl: hotelInfo.hotelImageUrl || hotelInfo.hotelThumbnailUrl || '/placeholder-hotel.jpg',
-    affiliateUrl: hotelInfo.dpPlanListUrl || hotelInfo.planListUrl || hotelInfo.hotelInformationUrl,
+    affiliateUrl: linkResult.finalUrl,
     area,
     nearest: hotelInfo.nearestStation || hotelInfo.access.split('、')[0] || 'その他',
     amenities,
@@ -201,21 +225,33 @@ function transformRakutenHotel(rakutenHotel: any, area: string = 'その他'): H
 }
 
 // フォールバック用のサンプルデータ生成
-function generateFallbackHotels(area: string, count: number = 3): Hotel[] {
+function generateFallbackHotels(
+  area: string, 
+  count: number = 3,
+  options?: { checkinDate: string; checkoutDate: string; adultNum: number }
+): Hotel[] {
   const fallbackHotels: Hotel[] = [];
   
   for (let i = 1; i <= count; i++) {
+    const hotelId = `99999${i.toString().padStart(2, '0')}`;
+    
+    // サンプルリンクを生成
+    let affiliateUrl = 'https://travel.rakuten.co.jp/';
+    if (options) {
+      affiliateUrl = generateSampleHotelLink(hotelId, `${area} フォールバックホテル ${i}`, options);
+    }
+    
     fallbackHotels.push({
-      id: `fallback-${area}-${i}`,
+      id: hotelId,
       name: `${area} フォールバックホテル ${i}`,
       price: 4000 + Math.floor(Math.random() * 4000),
       rating: 3.8 + Math.random() * 1.0,
       imageUrl: '/placeholder-hotel.jpg',
-      affiliateUrl: 'https://travel.rakuten.co.jp/',
+      affiliateUrl,
       area,
       nearest: `${area}駅`,
       amenities: ['WiFi', 'シャワー', '2人可'],
-      isSameDayAvailable: true // フォールバックでも空室ありとして表示
+      isSameDayAvailable: true
     });
   }
   
@@ -299,14 +335,22 @@ export async function GET(request: NextRequest) {
       console.log(`✅ VacantHotelSearch API成功: ${result.data.hotels.length}件`);
       
       hotels = result.data.hotels.map(hotelData => 
-        transformRakutenHotel(hotelData, areaName)
+        transformRakutenHotel(hotelData, areaName, {
+          checkinDate: today,
+          checkoutDate: tomorrow,
+          adultNum
+        })
       );
       isVacantData = true;
     } else {
       console.log('⚠️ VacantHotelSearch API: 空室ホテルが見つからないか、APIエラー');
       
       // 失敗時のみフォールバックデータを使用
-      hotels = generateFallbackHotels(areaName, 3);
+      hotels = generateFallbackHotels(areaName, 3, {
+        checkinDate: today,
+        checkoutDate: tomorrow,
+        adultNum
+      });
       isVacantData = false;
     }
 
@@ -361,7 +405,11 @@ export async function GET(request: NextRequest) {
       {
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',
-        items: generateFallbackHotels('東京都内', 2),
+        items: generateFallbackHotels('東京都内', 2, {
+          checkinDate: getTodayTomorrowJST().today,
+          checkoutDate: getTodayTomorrowJST().tomorrow,
+          adultNum: 2
+        }),
         fallback: true,
         debug: process.env.NODE_ENV === 'development' ? {
           hasAppId: !!process.env.RAKUTEN_APP_ID,
