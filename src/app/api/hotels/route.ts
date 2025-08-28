@@ -262,8 +262,8 @@ export async function GET(request: NextRequest) {
     } catch (apiError) {
       console.warn('❌ VacantHotelSearch API呼び出し失敗:', apiError);
       
-      // フォールバックデータを生成
-      hotels = generateFallbackData(areaName, 15);
+      // 空室確認できない場合は空の配列を返す（フォールバックしない）
+      hotels = [];
       isVacantData = false;
     }
 
@@ -285,15 +285,20 @@ export async function GET(request: NextRequest) {
         totalPages: 1,
         hasNext: false
       },
-      isSample: !isVacantData,
-      fallback: !isVacantData,
+      isSample: false,
+      fallback: false,
       searchParams: {
         area: areaName,
         checkinDate: today,
         checkoutDate: tomorrow,
         adultNum,
         isVacantSearch: isVacantData
-      }
+      },
+      message: isVacantData 
+        ? `${hotels.length}件の空室ありホテルが見つかりました` 
+        : hotels.length === 0 
+          ? '申し訳ございません。現在、空室が確認できるホテルがありません。しばらく経ってから再度お試しください。'
+          : 'データ取得中にエラーが発生しました'
     };
 
     console.log(`🎯 検索完了: ${hotels.length}件のホテル (空室データ: ${isVacantData})`);

@@ -654,14 +654,7 @@ function HomeContent() {
           <p className="text-gray-600">
             {displayedHotels.length}件表示中 / {filteredHotels.length}件が見つかりました
           </p>
-                      {isSampleData && (
-              <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                <p className="text-sm text-yellow-800">
-                  📄 楽天APIが失敗したため、サンプルデータを表示しています。
-                  実際のデータを表示するには、API接続を確認してください。
-                </p>
-              </div>
-            )}
+            {/* 空室確認済みのホテルのみ表示するため、フォールバック警告は不要 */}
         </div>
 
         {/* ホテル一覧 */}
@@ -674,10 +667,11 @@ function HomeContent() {
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🏨</div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              条件に一致するホテルがありません
+              空室が確認できるホテルがありません
             </h3>
             <p className="text-gray-600 mb-6">
-              検索条件を変更するか、条件をリセットしてください
+              現在、当日空室のあるホテルが見つかりませんでした。<br />
+              時間をおいて再度検索するか、エリアを変更してお試しください。
             </p>
             <button
               onClick={handleResetFilters}
