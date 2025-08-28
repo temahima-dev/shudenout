@@ -239,3 +239,5 @@ export function generateFAQStructuredData(faqs: Array<{ question: string; answer
     }))
   };
 }
+
+

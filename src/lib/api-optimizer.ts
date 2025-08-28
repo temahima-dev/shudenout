@@ -181,3 +181,5 @@ class ApiOptimizer {
 
 // シングルトンインスタンス
 export const apiOptimizer = new ApiOptimizer();
+
+

@@ -20,18 +20,7 @@ import { trackHotelSearch, trackLocationUsage, trackFilterUsage } from "@/lib/an
 type AreaFilter = "全て" | "新宿" | "渋谷" | "上野" | "新橋" | "池袋" | "六本木";
 type PriceFilter = "指定なし" | "~5000" | "~10000" | "10000~";
 
-// 現在の日付をYYYY-MM-DD形式で取得
-function getTodayString(): string {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
-}
-
-// 明日の日付をYYYY-MM-DD形式で取得
-function getTomorrowString(): string {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return tomorrow.toISOString().split('T')[0];
-}
+// 当日空きのみ表示のため日付関数は不要
 
 function HomeContent() {
   const router = useRouter();
@@ -45,8 +34,7 @@ function HomeContent() {
   const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
-  const [checkinDate, setCheckinDate] = useState<string>(getTodayString());
-  const [checkoutDate, setCheckoutDate] = useState<string>(getTomorrowString());
+  // 当日空きのみ表示のため日付選択は削除
   const [adultNum, setAdultNum] = useState<number>(2);
   const [displayCount, setDisplayCount] = useState<number>(30);
   const [hotels, setHotels] = useState<Hotel[]>([]);
@@ -60,8 +48,6 @@ function HomeContent() {
     const price = searchParams.get("price");
     const amenities = searchParams.get("amenities");
     const count = searchParams.get("count");
-    const checkin = searchParams.get("checkin");
-    const checkout = searchParams.get("checkout");
     const adults = searchParams.get("adults");
 
     if (area === "shinjuku") setAreaFilter("新宿");
@@ -90,13 +76,7 @@ function HomeContent() {
       }
     }
 
-    // 日付の復元（デフォルトは今日〜明日）
-    if (checkin && /^\d{4}-\d{2}-\d{2}$/.test(checkin)) {
-      setCheckinDate(checkin);
-    }
-    if (checkout && /^\d{4}-\d{2}-\d{2}$/.test(checkout)) {
-      setCheckoutDate(checkout);
-    }
+    // 当日空きのみ表示のため日付復元は不要
 
     // 人数の復元（デフォルト2名）
     if (adults) {
@@ -115,8 +95,6 @@ function HomeContent() {
     price?: PriceFilter;
     amenities?: string[];
     count?: number;
-    checkin?: string;
-    checkout?: string;
     adults?: number;
   }) => {
     const params = new URLSearchParams();
@@ -125,8 +103,6 @@ function HomeContent() {
     const newPrice = updates.price ?? priceFilter;
     const newAmenities = updates.amenities ?? amenityFilters;
     const newCount = updates.count ?? displayCount;
-    const newCheckin = updates.checkin ?? checkinDate;
-    const newCheckout = updates.checkout ?? checkoutDate;
     const newAdults = updates.adults ?? adultNum;
     
     // area
@@ -152,15 +128,7 @@ function HomeContent() {
       params.set("count", newCount.toString());
     }
     
-    // 日付（デフォルトの今日〜明日以外の場合のみ設定）
-    const todayStr = getTodayString();
-    const tomorrowStr = getTomorrowString();
-    if (newCheckin !== todayStr) {
-      params.set("checkin", newCheckin);
-    }
-    if (newCheckout !== tomorrowStr) {
-      params.set("checkout", newCheckout);
-    }
+    // 当日空きのみ表示のため日付パラメータは不要
     
     // 人数（2人以外の場合のみ設定）
     if (newAdults !== 2) {
@@ -168,7 +136,7 @@ function HomeContent() {
     }
     
     router.replace(`?${params.toString()}`, { scroll: false });
-  }, [router, areaFilter, priceFilter, amenityFilters, displayCount, checkinDate, checkoutDate, adultNum]);
+  }, [router, areaFilter, priceFilter, amenityFilters, displayCount, adultNum]);
 
   // APIからホテルデータを取得
   const fetchHotels = useCallback(async () => {
@@ -185,8 +153,6 @@ function HomeContent() {
       areaFilter,
       priceFilter,
       amenityFilters: amenityFilters.sort().join(','),
-      checkinDate,
-      checkoutDate,
       adultNum,
       displayCount,
       useCurrentLocation,
@@ -206,81 +172,65 @@ function HomeContent() {
     
     setLoading(true);
     try {
-      // 楽天API検索用のパラメータ変換
-      const rakutenParams = new URLSearchParams();
+      // 当日空室検索API用のパラメータ
+      const apiParams = new URLSearchParams();
       
       // 座標検索の設定（現在地 > エリアフィルタの優先順位）
       if (useCurrentLocation && currentLocation) {
         // 現在地を使用
-        rakutenParams.set("lat", currentLocation.lat.toString());
-        rakutenParams.set("lng", currentLocation.lng.toString());
-        rakutenParams.set("radiusKm", "1.0"); // 1km圏内
+        apiParams.set("lat", currentLocation.lat.toString());
+        apiParams.set("lng", currentLocation.lng.toString());
+        apiParams.set("radiusKm", "1.0"); // 1km圏内
       } else if (areaFilter !== "全て") {
         // エリアフィルタを使用
-        const coordinates = {
-          "新宿": { lat: 35.6896, lng: 139.6917 },
-          "渋谷": { lat: 35.6580, lng: 139.7016 }, 
-          "上野": { lat: 35.7141, lng: 139.7774 },
-          "新橋": { lat: 35.6662, lng: 139.7580 },
-          "池袋": { lat: 35.7295, lng: 139.7109 },
-          "六本木": { lat: 35.6627, lng: 139.7314 }
+        const areaMap = {
+          "新宿": "shinjuku",
+          "渋谷": "shibuya", 
+          "上野": "ueno",
+          "新橋": "shinbashi",
+          "池袋": "ikebukuro",
+          "六本木": "roppongi"
         };
-        const coord = coordinates[areaFilter as keyof typeof coordinates];
-        if (coord) {
-          rakutenParams.set("lat", coord.lat.toString());
-          rakutenParams.set("lng", coord.lng.toString());
-          rakutenParams.set("radiusKm", "2.0"); // 2.0km圏内
+        const areaCode = areaMap[areaFilter as keyof typeof areaMap];
+        if (areaCode) {
+          apiParams.set("area", areaCode);
         }
       } else {
-        // 全て選択時は東京都内広範囲（新宿を中心により広く）
-        rakutenParams.set("lat", "35.6896"); // 新宿座標
-        rakutenParams.set("lng", "139.6917");
-        rakutenParams.set("radiusKm", "10.0"); // 10km圏内（東京都内ほぼ全域）
+        // 全て選択時
+        apiParams.set("area", "all");
       }
       
       // 価格フィルタ
       if (priceFilter !== "指定なし") {
-        if (priceFilter === "~5000") rakutenParams.set("maxCharge", "5000");
-        else if (priceFilter === "~10000") rakutenParams.set("maxCharge", "10000");
-        else if (priceFilter === "10000~") rakutenParams.set("minCharge", "10000");
+        if (priceFilter === "~5000") apiParams.set("maxCharge", "5000");
+        else if (priceFilter === "~10000") apiParams.set("maxCharge", "10000");
+        else if (priceFilter === "10000~") apiParams.set("minCharge", "10000");
       }
       
-      // 日付・人数（空室検索のため）
-      rakutenParams.set("checkinDate", checkinDate);
-      rakutenParams.set("checkoutDate", checkoutDate);
-      rakutenParams.set("adultNum", adultNum.toString());
-      rakutenParams.set("roomNum", "1"); // 1部屋固定
+      // 人数
+      apiParams.set("adultNum", adultNum.toString());
       
-      // 設備フィルタ（楽天APIでは詳細検索が必要なため、後でフィルタ）
+      // 設備フィルタ
       if (amenityFilters.length > 0) {
-        rakutenParams.set("amenities", amenityFilters.join(","));
+        apiParams.set("amenities", amenityFilters.join(","));
       }
       
-      // ページング（楽天API対応）
-      const itemsPerPage = 30; // 楽天API最大値
-      const currentPage = Math.ceil(displayCount / itemsPerPage) || 1;
-      rakutenParams.set("page", currentPage.toString());
-      rakutenParams.set("hits", itemsPerPage.toString());
+      // 当日空室検索API呼び出し（重複防止付き）
+      const apiUrl = `/api/hotels`;
+      const apiParamsObj = Object.fromEntries(apiParams.entries());
       
-      // ソート（安い順）
-      rakutenParams.set("sort", "+roomCharge");
-      
-      // 楽天API呼び出し（重複防止付き）
-      const apiUrl = `/api/rakuten/search`;
-      const apiParams = Object.fromEntries(rakutenParams.entries());
-      
-      // デバッグ用ログ（エリアフィルター問題解決のため）
-      console.log("🔍 API Request Debug:", {
+      // デバッグ用ログ
+      console.log("🔍 当日空室検索 API Request:", {
         areaFilter,
-        apiUrl: `${apiUrl}?${rakutenParams.toString()}`,
-        params: apiParams
+        apiUrl: `${apiUrl}?${apiParams.toString()}`,
+        params: apiParamsObj
       });
       
       const data = await apiOptimizer.deduplicateRequest(
         apiUrl,
-        apiParams,
+        apiParamsObj,
         async () => {
-          const response = await fetch(`${apiUrl}?${rakutenParams.toString()}`, {
+          const response = await fetch(`${apiUrl}?${apiParams.toString()}`, {
             signal: controller.signal,
             cache: 'no-store'
           });
@@ -368,7 +318,7 @@ function HomeContent() {
       setLoading(false);
       setAbortController(null);
     }
-  }, [areaFilter, priceFilter, amenityFilters, displayCount, checkinDate, checkoutDate, adultNum, abortController, useCurrentLocation, currentLocation]);
+  }, [areaFilter, priceFilter, amenityFilters, displayCount, adultNum, abortController, useCurrentLocation, currentLocation]);
   
   // デバウンス付きでAPIを呼び出し
   useEffect(() => {
@@ -377,7 +327,7 @@ function HomeContent() {
     }, 250);
     
     return () => clearTimeout(timeoutId);
-  }, [areaFilter, priceFilter, amenityFilters, displayCount, checkinDate, checkoutDate, adultNum]);
+  }, [areaFilter, priceFilter, amenityFilters, displayCount, adultNum]);
 
   // APIで既にフィルタリング済み
   const filteredHotels = hotels;
@@ -424,8 +374,6 @@ function HomeContent() {
     setAreaFilter("全て");
     setPriceFilter("指定なし");
     setAmenityFilters([]);
-    setCheckinDate(getTodayString());
-    setCheckoutDate(getTomorrowString());
     setAdultNum(2);
     setDisplayCount(30);
     setUseCurrentLocation(false);
@@ -453,17 +401,7 @@ function HomeContent() {
     updateURL({ price, count: 30 });
   };
 
-  const handleCheckinDateChange = (date: string) => {
-    setCheckinDate(date);
-    setDisplayCount(30);
-    updateURL({ checkin: date, count: 30 });
-  };
-
-  const handleCheckoutDateChange = (date: string) => {
-    setCheckoutDate(date);
-    setDisplayCount(30);
-    updateURL({ checkout: date, count: 30 });
-  };
+  // 当日空きのみ表示のため日付変更ハンドラーは不要
 
   const handleAdultNumChange = (num: number) => {
     setAdultNum(num);
@@ -495,7 +433,7 @@ function HomeContent() {
             </h1>
             
             <p className="text-xl md:text-2xl font-medium mb-6 text-blue-50">
-              終電を逃しても、大丈夫。
+              本日泊まれるホテルのみ表示中
             </p>
           </div>
 
@@ -517,7 +455,7 @@ function HomeContent() {
 
           {/* 信頼性表示 */}
           <div className="text-sm text-blue-200 opacity-75">
-            ⭐ 安心の楽天トラベル提携・即時予約可能
+            ⭐ 楽天トラベル空室検索・当日予約可能
           </div>
         </div>
       </section>
@@ -525,112 +463,29 @@ function HomeContent() {
       {/* フィルタ Section */}
       <section id="filters" className="bg-white shadow-lg">
         <div className="max-w-6xl mx-auto px-4 py-6 md:py-8">
-          {/* 日付・人数選択 */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 md:p-6 rounded-xl mb-6 border border-blue-100 shadow-sm">
+          {/* 当日空き表示説明 */}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 md:p-6 rounded-xl mb-6 border border-green-200 shadow-sm">
             <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center">
-              📅 宿泊日・人数
+              ⚡ 当日空室のみ表示中
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              希望の日付・人数を指定してホテルを検索できます。空室状況は各予約サイトでご確認ください。
+              本日→明日の空室があるホテルのみを表示しています。終電後にすぐ行ける宿だけ！
             </p>
-            {/* モバイル: 1列、デスクトップ: 3列レイアウト */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* チェックイン日 */}
-              <div>
-                {/* デスクトップ表示: 見出しを上に配置 */}
-                <label className="hidden sm:block text-sm font-medium text-gray-700 mb-2">
-                  チェックイン
-                </label>
-                {/* スマホ表示: 見出しと入力フィールドを横並び */}
-                <div className="sm:hidden flex items-center space-x-2">
-                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
-                    IN
-                  </label>
-                  <input
-                    id="checkin-mobile"
-                    type="date"
-                    value={checkinDate}
-                    min={getTodayString()}
-                    onChange={(e) => handleCheckinDateChange(e.target.value)}
-                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer text-gray-900"
-                  />
-                </div>
-                {/* デスクトップ表示: 通常の入力フィールド */}
-                <input
-                  id="checkin-desktop"
-                  type="date"
-                  value={checkinDate}
-                  min={getTodayString()}
-                  onChange={(e) => handleCheckinDateChange(e.target.value)}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer text-gray-900"
-                />
-              </div>
-
-              {/* チェックアウト日 */}
-              <div>
-                {/* デスクトップ表示: 見出しを上に配置 */}
-                <label className="hidden sm:block text-sm font-medium text-gray-700 mb-2">
-                  チェックアウト
-                </label>
-                {/* スマホ表示: 見出しと入力フィールドを横並び */}
-                <div className="sm:hidden flex items-center space-x-2">
-                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
-                    OUT
-                  </label>
-                  <input
-                    id="checkout-mobile"
-                    type="date"
-                    value={checkoutDate}
-                    min={checkinDate}
-                    onChange={(e) => handleCheckoutDateChange(e.target.value)}
-                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm cursor-pointer text-gray-900"
-                  />
-                </div>
-                {/* デスクトップ表示: 通常の入力フィールド */}
-                <input
-                  id="checkout-desktop"
-                  type="date"
-                  value={checkoutDate}
-                  min={checkinDate}
-                  onChange={(e) => handleCheckoutDateChange(e.target.value)}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm cursor-pointer text-gray-900"
-                />
-              </div>
-
-              {/* 人数 */}
-              <div>
-                {/* デスクトップ表示: 見出しを上に配置 */}
-                <label className="hidden sm:block text-sm font-medium text-gray-700 mb-2">
-                  人数
-                </label>
-                {/* スマホ表示: 見出しとプルダウンを横並び */}
-                <div className="sm:hidden flex items-center space-x-2">
-                  <label className="text-sm font-bold text-gray-800 w-8 flex-shrink-0">
-                    人数
-                  </label>
-                  <select
-                    value={adultNum}
-                    onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
-                    className="max-w-xs p-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base shadow-sm text-gray-900"
-                  >
-                    <option value={2}>2人</option>
-                    <option value={1}>1人</option>
-                    <option value={3}>3人</option>
-                    <option value={4}>4人</option>
-                  </select>
-                </div>
-                {/* デスクトップ表示: 通常のプルダウン */}
-                <select
-                  value={adultNum}
-                  onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
-                  className="hidden sm:block w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm text-gray-900"
-                >
-                  <option value={2}>2人</option>
-                  <option value={1}>1人</option>
-                  <option value={3}>3人</option>
-                  <option value={4}>4人</option>
-                </select>
-              </div>
+            {/* 人数選択のみ残す */}
+            <div className="flex items-center space-x-4">
+              <label className="text-sm font-medium text-gray-700">
+                人数:
+              </label>
+              <select
+                value={adultNum}
+                onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
+                className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm text-gray-900"
+              >
+                <option value={1}>1人</option>
+                <option value={2}>2人</option>
+                <option value={3}>3人</option>
+                <option value={4}>4人</option>
+              </select>
             </div>
           </div>
 
@@ -891,8 +746,6 @@ function HomeContent() {
                 <HotelCard 
                   key={hotel.id} 
                   hotel={hotel}
-                  checkinDate={checkinDate}
-                  checkoutDate={checkoutDate}
                   adultNum={adultNum}
                 />
               ))}

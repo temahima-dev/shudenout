@@ -152,6 +152,21 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
             </div>
           </div>
         )}
+
+        {/* 当日空室バッジ（画像上） */}
+        <div className="absolute bottom-3 left-3">
+          <div 
+            className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 ${
+              hotel.isSameDayAvailable 
+                ? 'bg-green-500/90 text-white' 
+                : 'bg-yellow-500/90 text-black'
+            }`}
+            aria-label={hotel.isSameDayAvailable ? '本日空室あり' : '空室未確認'}
+          >
+            <span>{hotel.isSameDayAvailable ? '✅' : '❓'}</span>
+            <span>{hotel.isSameDayAvailable ? '本日空室あり' : '空室未確認'}</span>
+          </div>
+        </div>
         
         {/* 診断バッジ（開発時のみ） */}
         {isDebugMode && badgeStatus && (

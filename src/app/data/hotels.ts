@@ -14,6 +14,8 @@ export interface Hotel {
   // 計算された距離情報
   distanceKm?: number;
   walkingTimeMinutes?: number;
+  // 当日空室フラグ
+  isSameDayAvailable?: boolean;
   // デバッグ用（debugLinks=1の時のみ）
   debugInfo?: {
     fromApi: {
