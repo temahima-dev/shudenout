@@ -200,12 +200,14 @@ function transformRakutenHotel(
   // リンクの有効性を検証
   const validation = validateRakutenLink(linkResult.finalUrl);
   
-  console.log(`Hotel ${hotelInfo.hotelNo} link generation:`, {
-    name: hotelInfo.hotelName,
+  console.log(`🔗 Hotel ${hotelInfo.hotelNo} (${hotelInfo.hotelName}) link:`, {
     source: linkResult.source,
+    status: linkResult.debug.status,
+    sourceUrl: linkResult.debug.sourceUrl,
     finalUrl: linkResult.finalUrl,
-    validation,
-    debug: linkResult.debug
+    validation: validation.isValid ? '✅ Valid' : `❌ ${validation.reason}`,
+    usedSource: linkResult.debug.usedSource,
+    hasAffiliate: linkResult.debug.hasAffiliate
   });
 
   return {
@@ -390,7 +392,13 @@ export async function GET(request: NextRequest) {
         hasAppId: !!process.env.RAKUTEN_APP_ID,
         success: apiSuccess,
         error: apiError,
-        apiEndpoint: 'VacantHotelSearch/20170426'
+        apiEndpoint: 'VacantHotelSearch/20170426',
+        sampleHotelLinks: hotels.slice(0, 2).map(hotel => ({
+          id: hotel.id,
+          name: hotel.name,
+          affiliateUrl: hotel.affiliateUrl,
+          finalHrefSample: hotel.affiliateUrl
+        }))
       } : undefined
     };
 
