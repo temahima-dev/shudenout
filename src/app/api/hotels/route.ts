@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { todayTomorrowJST } from '@/lib/date';
 import { generateRakutenHotelLink, generateSampleHotelLink, validateRakutenLink } from '@/lib/providers/rakuten';
 
-// 簡単な日付取得関数
-function getTodayTomorrowJST(): { today: string; tomorrow: string } {
-  const now = new Date();
-  const today = new Date(now);
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  
-  const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
-  };
-  
-  return {
-    today: formatDate(today),
-    tomorrow: formatDate(tomorrow)
-  };
-}
+// Force dynamic rendering and use Node.js runtime
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // ホテル型定義
 interface Hotel {
@@ -89,7 +77,19 @@ async function fetchVacantHotels(params: {
   searchRadius?: number;
   minCharge?: number;
   maxCharge?: number;
-}): Promise<{ data: RakutenVacantHotelResponse; success: boolean; error?: string }> {
+}, isInspectMode: boolean = false): Promise<{ 
+  data: RakutenVacantHotelResponse; 
+  success: boolean; 
+  error?: string;
+  upstream?: {
+    url: string;
+    status: number;
+    statusText: string;
+    elapsedMs: number;
+    bodySnippet: string;
+    paramsUsed: Record<string, string>;
+  };
+}> {
   // 関数内で環境変数を参照
   const rakutenAppId = process.env.RAKUTEN_APP_ID;
   
@@ -101,70 +101,115 @@ async function fetchVacantHotels(params: {
     };
   }
 
+  // パラメータ構築（必須パラメータを強制）
   const searchParams = new URLSearchParams({
     applicationId: rakutenAppId,
-    checkinDate: params.checkinDate,
-    checkoutDate: params.checkoutDate,
-    adultNum: params.adultNum.toString(),
-    roomNum: params.roomNum.toString(),
+    checkinDate: params.checkinDate, // JST形式（yyyy-MM-dd）
+    checkoutDate: params.checkoutDate, // JST形式（yyyy-MM-dd）
+    adultNum: Math.max(1, params.adultNum || 2).toString(), // 最低1人、デフォルト2人
+    roomNum: Math.max(1, params.roomNum || 1).toString(), // 最低1室、デフォルト1室
     responseType: 'small',
-    datumType: '1', // WGS84度単位
+    datumType: '1', // WGS84度単位（必須）
     sort: '+roomCharge', // 安い順
     hits: '30',
     page: '1'
   });
 
-  // 位置情報が指定されている場合
+  // 位置情報が指定されている場合（必須パラメータ追加）
   if (params.lat && params.lng) {
     searchParams.set('latitude', params.lat.toString());
     searchParams.set('longitude', params.lng.toString());
-    searchParams.set('searchRadius', (params.searchRadius || 3).toString());
+    searchParams.set('searchRadius', Math.max(1, params.searchRadius || 3).toString()); // 最低1km
   }
 
   // 価格フィルタ
-  if (params.minCharge) {
+  if (params.minCharge && params.minCharge > 0) {
     searchParams.set('minCharge', params.minCharge.toString());
   }
-  if (params.maxCharge) {
+  if (params.maxCharge && params.maxCharge > 0) {
     searchParams.set('maxCharge', params.maxCharge.toString());
   }
 
   const apiUrl = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426?${searchParams.toString()}`;
+  const paramsUsed = Object.fromEntries(searchParams.entries());
   
   console.log('🔍 Rakuten VacantHotelSearch API Request:', {
     url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
-    params: Object.fromEntries(searchParams.entries())
+    params: paramsUsed
   });
+
+  const startTime = Date.now();
 
   try {
     const response = await fetch(apiUrl, {
       headers: {
-        'User-Agent': 'ShudenOutApp/1.0'
+        'User-Agent': 'ShudenOutApp/1.0',
+        'Cache-Control': 'no-store'
       },
       cache: 'no-store' // キャッシュなし
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const elapsedMs = Date.now() - startTime;
+    const responseText = await response.text();
+    
+    let data: RakutenVacantHotelResponse;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      throw new Error(`JSON Parse Error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
     }
 
-    const data: RakutenVacantHotelResponse = await response.json();
+    const upstream = isInspectMode ? {
+      url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
+      status: response.status,
+      statusText: response.statusText,
+      elapsedMs,
+      bodySnippet: responseText.slice(0, 300) + (responseText.length > 300 ? '...' : ''),
+      paramsUsed
+    } : undefined;
+
+    if (!response.ok) {
+      return {
+        data: {},
+        success: false,
+        error: `HTTP ${response.status}: ${response.statusText}`,
+        upstream
+      };
+    }
     
     if (data.error) {
-      throw new Error(`Rakuten API Error: ${data.error} - ${data.error_description}`);
+      return {
+        data: {},
+        success: false,
+        error: `Rakuten API Error: ${data.error} - ${data.error_description}`,
+        upstream
+      };
     }
 
     return {
       data,
-      success: true
+      success: true,
+      upstream
     };
 
   } catch (error) {
+    const elapsedMs = Date.now() - startTime;
     console.error('❌ VacantHotelSearch API Error:', error);
+    
+    const upstream = isInspectMode ? {
+      url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
+      status: 0,
+      statusText: 'Network Error',
+      elapsedMs,
+      bodySnippet: error instanceof Error ? error.message : String(error),
+      paramsUsed
+    } : undefined;
+    
     return {
       data: {},
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      upstream
     };
   }
 }
@@ -265,7 +310,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // 常に当日→明日の日付を使用（JST）
-    const { today, tomorrow } = getTodayTomorrowJST();
+    const { today, tomorrow } = todayTomorrowJST();
     
     // パラメータ取得
     const area = searchParams.get('area') || 'all';
@@ -276,6 +321,7 @@ export async function GET(request: NextRequest) {
     const maxCharge = searchParams.get('maxCharge') ? parseInt(searchParams.get('maxCharge')!) : undefined;
     const adultNum = parseInt(searchParams.get('adultNum') || '2');
     const amenities = searchParams.get('amenities')?.split(',').filter(Boolean) || [];
+    const isInspectMode = searchParams.get('inspect') === '1';
 
     let searchLat: number | undefined;
     let searchLng: number | undefined;
@@ -316,6 +362,7 @@ export async function GET(request: NextRequest) {
     let isVacantData = false;
     let apiSuccess = false;
     let apiError: string | undefined;
+    let upstreamDebug: any = undefined;
 
     // 楽天VacantHotelSearch API呼び出し
     const result = await fetchVacantHotels({
@@ -328,10 +375,11 @@ export async function GET(request: NextRequest) {
       searchRadius: radiusKm,
       minCharge,
       maxCharge
-    });
+    }, isInspectMode);
 
     apiSuccess = result.success;
     apiError = result.error;
+    upstreamDebug = result.upstream;
 
     if (result.success && result.data.hotels && result.data.hotels.length > 0) {
       console.log(`✅ VacantHotelSearch API成功: ${result.data.hotels.length}件`);
@@ -398,24 +446,27 @@ export async function GET(request: NextRequest) {
           name: hotel.name,
           affiliateUrl: hotel.affiliateUrl,
           finalHrefSample: hotel.affiliateUrl
-        }))
+        })),
+        upstream: upstreamDebug
       } : undefined
     };
 
     console.log(`🎯 検索完了: ${hotels.length}件のホテル (空室データ: ${isVacantData})`);
 
-    return NextResponse.json(response);
+    const jsonResponse = NextResponse.json(response);
+    jsonResponse.headers.set('Cache-Control', 'no-store');
+    return jsonResponse;
 
   } catch (error) {
     console.error('❌ Hotel search error:', error);
     
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       {
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',
         items: generateFallbackHotels('東京都内', 2, {
-          checkinDate: getTodayTomorrowJST().today,
-          checkoutDate: getTodayTomorrowJST().tomorrow,
+          checkinDate: todayTomorrowJST().today,
+          checkoutDate: todayTomorrowJST().tomorrow,
           adultNum: 2
         }),
         fallback: true,
@@ -428,5 +479,7 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 }
     );
+    errorResponse.headers.set('Cache-Control', 'no-store');
+    return errorResponse;
   }
 }
