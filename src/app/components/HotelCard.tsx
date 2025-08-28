@@ -1,9 +1,8 @@
 "use client";
 
 import { type Hotel } from "@/app/data/hotels";
-import { formatDistance, formatWalkingTime } from "@/lib/geolocation";
 import { trackHotelBooking } from "@/lib/analytics";
-import LazyImage from "./LazyImage";
+import Image from "next/image";
 
 interface HotelCardProps {
   hotel: Hotel;
@@ -123,7 +122,7 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
     <div className="group bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out">
       {/* ホテル画像 */}
       <div className="relative h-48 w-full bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
-        <LazyImage
+        <Image
           src={hotel.imageUrl}
           alt={hotel.name}
           width={400}
@@ -202,17 +201,7 @@ export default function HotelCard({ hotel, checkinDate, checkoutDate, adultNum }
           </div>
           <span className="text-gray-300">•</span>
           <span className="text-sm text-gray-500">{hotel.area}</span>
-          {hotel.distanceKm && hotel.walkingTimeMinutes && (
-            <>
-              <span className="text-gray-300">•</span>
-              <div className="flex items-center text-sm text-blue-600 font-medium">
-                <svg className="w-4 h-4 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span>{formatDistance(hotel.distanceKm)} • {formatWalkingTime(hotel.walkingTimeMinutes)}</span>
-              </div>
-            </>
-          )}
+
         </div>
 
         {/* 評価（テキスト版） */}

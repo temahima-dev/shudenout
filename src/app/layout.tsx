@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Header from "@/app/components/Header";
 import Footer from "@/app/components/Footer";
 import StructuredData from "@/app/components/StructuredData";
 import GoogleAnalytics from "@/app/components/GoogleAnalytics";
@@ -44,7 +43,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-gray-50`}
       >
         <GoogleAnalytics />
-        <Header />
+        {/* Header削除済み - 当日空室検索ではシンプル表示 */}
         <main id="main">
           {children}
         </main>

@@ -5,15 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import HotelCard from "@/app/components/HotelCard";
 import PerformanceMonitor from "@/app/components/PerformanceMonitor";
 import { type Hotel } from "@/app/data/hotels";
-import { 
-  getCurrentPosition, 
-  calculateDistance, 
-  distanceToWalkingTime, 
-  formatDistance, 
-  formatWalkingTime,
-  type Coordinates 
-} from "@/lib/geolocation";
-import { cacheManager } from "@/lib/cache";
+// 位置情報用の型定義
+type Coordinates = {
+  lat: number;
+  lng: number;
+};
 import { apiOptimizer } from "@/lib/api-optimizer";
 import { trackHotelSearch, trackLocationUsage, trackFilterUsage } from "@/lib/analytics";
 
@@ -148,27 +144,7 @@ function HomeContent() {
     const controller = new AbortController();
     setAbortController(controller);
     
-    // キャッシュキー用のパラメータ作成
-    const cacheParams = {
-      areaFilter,
-      priceFilter,
-      amenityFilters: amenityFilters.sort().join(','),
-      adultNum,
-      displayCount,
-      useCurrentLocation,
-      currentLocation: currentLocation ? `${currentLocation.lat},${currentLocation.lng}` : null
-    };
-    
-    // キャッシュから検索結果を取得
-    const cachedResult = cacheManager.getSearchResults(cacheParams);
-    if (cachedResult) {
-      console.log('🚀 キャッシュから検索結果を取得');
-      setHotels(cachedResult.items);
-      setIsSampleData(cachedResult.isSample || cachedResult.fallback || false);
-      setLoading(false);
-      setAbortController(null);
-      return;
-    }
+    // 当日空室検索のためキャッシュは使用しない（リアルタイム性重視）
     
     setLoading(true);
     try {
@@ -250,35 +226,7 @@ function HomeContent() {
           );
         }
         
-        // 現在地が利用可能な場合、距離情報を計算して追加
-        if (useCurrentLocation && currentLocation) {
-          filteredItems = filteredItems.map((hotel: Hotel) => {
-            if (hotel.latitude && hotel.longitude) {
-              const distanceKm = calculateDistance(
-                currentLocation,
-                { lat: hotel.latitude, lng: hotel.longitude }
-              );
-              const walkingTimeMinutes = distanceToWalkingTime(distanceKm);
-              
-              return {
-                ...hotel,
-                distanceKm,
-                walkingTimeMinutes,
-              };
-            }
-            return hotel;
-          });
-          
-          // 距離順でソート（近い順）
-          filteredItems.sort((a: Hotel, b: Hotel) => {
-            if (a.distanceKm && b.distanceKm) {
-              return a.distanceKm - b.distanceKm;
-            }
-            if (a.distanceKm) return -1;
-            if (b.distanceKm) return 1;
-            return 0;
-          });
-        }
+        // 当日空室検索結果はそのまま表示（価格順）
         
         setHotels(filteredItems);
         setIsSampleData(data.isSample || data.fallback || false);
@@ -292,18 +240,7 @@ function HomeContent() {
           resultCount: filteredItems.length,
         });
         
-        // 結果をキャッシュに保存
-        const cacheData = {
-          items: filteredItems,
-          paging: data.paging || {
-            total: filteredItems.length,
-            page: 1,
-            totalPages: 1,
-            hasNext: false
-          },
-          fallback: data.fallback || false
-        };
-        cacheManager.setSearchResults(cacheParams, cacheData);
+        // 当日空室検索のためキャッシュは保存しない（リアルタイム性重視）
       } else {
         setHotels([]);
         setIsSampleData(false);
@@ -350,16 +287,26 @@ function HomeContent() {
   const handleGetCurrentLocation = async () => {
     setIsGettingLocation(true);
     try {
-      const result = await getCurrentPosition();
-      setCurrentLocation(result.coords);
+      if (!navigator.geolocation) {
+        throw new Error('位置情報がサポートされていません');
+      }
+      
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000
+        });
+      });
+      
+      setCurrentLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      });
       setUseCurrentLocation(true);
       
       // アナリティクス追跡
       trackLocationUsage(true);
-      
-      if (result.error) {
-        console.warn("位置情報取得警告:", result.error);
-      }
     } catch (error) {
       console.error("位置情報取得エラー:", error);
       
