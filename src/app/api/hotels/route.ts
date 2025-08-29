@@ -69,6 +69,30 @@ const AREA_COORDINATES: Record<string, { lat: number; lng: number; name: string 
 // デフォルト検索中心（新宿駅）
 const DEFAULT_SEARCH_CENTER = { lat: 35.690921, lng: 139.700258, name: '新宿駅周辺' };
 
+// ユーティリティ関数
+function safeParseJson(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    console.warn('JSON parse failed:', error);
+    return {};
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function jitter(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function jsonResponse(data: any, status: number = 200): NextResponse {
+  const response = NextResponse.json(data, { status });
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
+}
+
 // 単一半径でのVacantHotelSearch API呼び出し
 async function fetchVacantHotelsSingleRadius(params: {
   checkinDate: string;
@@ -271,7 +295,7 @@ async function fetchVacantHotelsSingleRadius(params: {
   }
 }
 
-// 中心点ずらし検索付きVacantHotelSearch API呼び出し
+// 堅牢な中心点ずらし検索関数
 async function fetchVacantHotelsWithCenterShifting(params: {
   checkinDate: string;
   checkoutDate: string;
@@ -283,24 +307,34 @@ async function fetchVacantHotelsWithCenterShifting(params: {
   minCharge?: number;
   maxCharge?: number;
 }, isInspectMode: boolean = false): Promise<{
-  hotels: any[];
-  success: boolean;
-  error?: string;
-  statusCode?: number;
-  totalPointsSearched: number;
-  allNotFound?: boolean;
-  upstreamArray?: Array<{
+  collected: Hotel[];
+  upstreamLogs: Array<{
     lat: number;
     lng: number;
     radius: number;
     status: number;
-    statusText: string;
     elapsedMs: number;
-    bodySnippet: string;
-    isNotFound?: boolean;
-    hotelCount?: number;
+    bodySnippet?: string;
   }>;
+  totalPointsSearched: number;
 }> {
+  const rakutenAppId = process.env.RAKUTEN_APP_ID;
+  if (!rakutenAppId) {
+    throw new Error('RAKUTEN_APP_ID not configured');
+  }
+
+  // 集約用変数を最上位で定義
+  const collected: Hotel[] = [];
+  const upstreamLogs: Array<{
+    lat: number;
+    lng: number;
+    radius: number;
+    status: number;
+    elapsedMs: number;
+    bodySnippet?: string;
+  }> = [];
+  const seen = new Set<string>(); // 重複排除用
+
   // 東京の緯度で 1km ≈ lat:0.009, lng:0.0127
   const latPerKm = 0.009;
   const lngPerKm = 0.0127;
@@ -318,10 +352,6 @@ async function fetchVacantHotelsWithCenterShifting(params: {
     [-2, -2]     // 南西に2km
   ];
   
-  const upstreamArray: Array<any> = [];
-  const allHotels: any[] = [];
-  const hotelNoSet = new Set<string>(); // 重複排除用
-  
   console.log(`🔍 Starting VacantHotelSearch with center shifting (${offsetsKm.length} points, radius: ${params.searchRadius}km)`);
 
   for (let i = 0; i < offsetsKm.length; i++) {
@@ -331,61 +361,129 @@ async function fetchVacantHotelsWithCenterShifting(params: {
     
     console.log(`🎯 Point ${i + 1}/${offsetsKm.length}: lat=${searchLat.toFixed(6)}, lng=${searchLng.toFixed(6)} (offset: ${offsetLat}km, ${offsetLng}km)`);
     
-    const result = await fetchVacantHotelsSingleRadius({
-      ...params,
-      lat: searchLat,
-      lng: searchLng
-    }, isInspectMode);
+    // APIパラメータ構築
+    const vacantParams = new URLSearchParams({
+      applicationId: rakutenAppId,
+      checkinDate: params.checkinDate,
+      checkoutDate: params.checkoutDate,
+      latitude: searchLat.toString(),
+      longitude: searchLng.toString(),
+      searchRadius: params.searchRadius.toString(),
+      datumType: '1',
+      adultNum: params.adultNum.toString(),
+      roomNum: params.roomNum.toString(),
+      hits: '30',
+      searchPattern: '0',
+      responseType: 'small'
+    });
 
-    // debug用にupstream記録
-    if (isInspectMode && result.upstream) {
-      upstreamArray.push({
+    if (params.minCharge) vacantParams.set('minCharge', params.minCharge.toString());
+    if (params.maxCharge) vacantParams.set('maxCharge', params.maxCharge.toString());
+
+    const vacantUrl = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426?${vacantParams}`;
+
+    try {
+      const t0 = Date.now();
+      const res = await fetch(vacantUrl, { cache: 'no-store' });
+      const elapsedMs = Date.now() - t0;
+      const text = await res.text();
+      const json = safeParseJson(text);
+
+      // ログ記録（inspect時のみ詳細を含める）
+      upstreamLogs.push({
         lat: searchLat,
         lng: searchLng,
-        radius: result.upstream.radius,
-        status: result.upstream.status,
-        statusText: result.upstream.statusText,
-        elapsedMs: result.upstream.elapsedMs,
-        bodySnippet: result.upstream.bodySnippet,
-        isNotFound: result.isNotFound,
-        hotelCount: result.success && result.data.hotels ? result.data.hotels.length : 0
+        radius: params.searchRadius,
+        status: res.status,
+        elapsedMs,
+        ...(isInspectMode && { bodySnippet: text.slice(0, 300) })
       });
-    }
 
-    // 成功した場合はホテルを収集
-    if (result.success && result.data.hotels && result.data.hotels.length > 0) {
-      console.log(`✅ Found ${result.data.hotels.length} hotels at point ${i + 1} (${offsetLat}km, ${offsetLng}km)`);
-      
-      // 重複排除しながら追加
-      for (const hotel of result.data.hotels) {
-        const hotelNo = hotel.hotelNo || hotel.hotelBasicInfo?.hotelNo;
-        if (hotelNo && !hotelNoSet.has(hotelNo)) {
-          hotelNoSet.add(hotelNo);
-          allHotels.push(hotel);
+      if (res.status === 200) {
+        const items = mapVacantJsonToHotels(json);
+        console.log(`✅ Found ${items.length} hotels at point ${i + 1}`);
+        
+        // 重複排除しながら追加
+        for (const item of items) {
+          const hotelNo = item.id || (item as any).hotelNo;
+          if (hotelNo && !seen.has(hotelNo)) {
+            seen.add(hotelNo);
+            collected.push(item);
+          }
         }
+      } else if (res.status === 404 && (json?.error === 'not_found' || json?.error_description?.includes('not found'))) {
+        console.log(`📍 Not found at point ${i + 1}, continuing...`);
+        // 0件扱い → 続行
+      } else if (res.status === 429 || res.status >= 500) {
+        console.warn(`⚠️ API error (${res.status}) at point ${i + 1}, attempting retry...`);
+        await delay(jitter(300, 600));
+        
+        // 1回だけリトライ
+        const retryT0 = Date.now();
+        const retryRes = await fetch(vacantUrl, { cache: 'no-store' });
+        const retryElapsedMs = Date.now() - retryT0;
+        const retryText = await retryRes.text();
+        const retryJson = safeParseJson(retryText);
+
+        upstreamLogs.push({
+          lat: searchLat,
+          lng: searchLng,
+          radius: params.searchRadius,
+          status: retryRes.status,
+          elapsedMs: retryElapsedMs,
+          ...(isInspectMode && { bodySnippet: retryText.slice(0, 300) })
+        });
+
+        if (retryRes.status === 200) {
+          const retryItems = mapVacantJsonToHotels(retryJson);
+          console.log(`✅ Retry success: ${retryItems.length} hotels at point ${i + 1}`);
+          
+          for (const item of retryItems) {
+            const hotelNo = item.id || (item as any).hotelNo;
+            if (hotelNo && !seen.has(hotelNo)) {
+              seen.add(hotelNo);
+              collected.push(item);
+            }
+          }
+        } else {
+          console.error(`❌ Retry failed (${retryRes.status}) at point ${i + 1}`);
+        }
+      } else {
+        console.warn(`⚠️ Parameter or other error (${res.status}) at point ${i + 1}, continuing...`);
       }
-    } else if (result.success && (!result.data.hotels || result.data.hotels.length === 0)) {
-      console.log(`ℹ️ API success but 0 hotels at point ${i + 1}`);
-    } else if (result.isNotFound) {
-      console.log(`📍 Not found at point ${i + 1}, continuing to next point...`);
-    } else if (result.statusCode === 400) {
-      console.warn(`⚠️ Parameter error at point ${i + 1} (status: 400), continuing...`);
-    } else if (result.statusCode === 429 || (result.statusCode && result.statusCode >= 500)) {
-      console.error(`❌ API error (${result.statusCode}) at point ${i + 1}, but continuing...`);
-    } else {
-      console.error(`❌ Other error (${result.statusCode}) at point ${i + 1}: ${result.error}`);
+    } catch (error) {
+      console.error(`❌ Network error at point ${i + 1}:`, error);
+      upstreamLogs.push({
+        lat: searchLat,
+        lng: searchLng,
+        radius: params.searchRadius,
+        status: 0,
+        elapsedMs: 0,
+        ...(isInspectMode && { bodySnippet: error instanceof Error ? error.message : String(error) })
+      });
     }
   }
 
-  console.log(`🎯 Center shifting search completed: ${allHotels.length} unique hotels found from ${offsetsKm.length} points`);
+  console.log(`🎯 Center shifting search completed: ${collected.length} unique hotels found from ${offsetsKm.length} points`);
 
   return {
-    hotels: allHotels,
-    success: allHotels.length > 0,
-    totalPointsSearched: offsetsKm.length,
-    allNotFound: allHotels.length === 0,
-    upstreamArray: isInspectMode ? upstreamArray : undefined
+    collected,
+    upstreamLogs,
+    totalPointsSearched: offsetsKm.length
   };
+}
+
+// 楽天VacantHotelSearchのJSONレスポンスからHotel配列に変換
+function mapVacantJsonToHotels(json: any): Hotel[] {
+  if (!json || !json.hotels || !Array.isArray(json.hotels)) {
+    return [];
+  }
+  
+  return json.hotels.map((hotelData: any) => transformRakutenHotel(hotelData, 'VacantSearch', {
+    checkinDate: '',
+    checkoutDate: '',
+    adultNum: 2
+  }));
 }
 
 // 楽天レスポンスをHotel型に変換
@@ -574,56 +672,53 @@ export async function GET(request: NextRequest) {
         adultNum
       });
     } else {
-      // 楽天VacantHotelSearch API呼び出し（中心点ずらし付き）
-      console.log('🔍 Calling VacantHotelSearch API with center shifting...');
+      // 楽天VacantHotelSearch API呼び出し（堅牢な中心点ずらし付き）
+      console.log('🔍 Calling VacantHotelSearch API with robust center shifting...');
       
-      const result = await fetchVacantHotelsWithCenterShifting({
-        checkinDate: today,
-        checkoutDate: tomorrow,
-        adultNum,
-        roomNum: 1,
-        lat: searchLat,
-        lng: searchLng,
-        searchRadius: radiusKm,
-        minCharge,
-        maxCharge
-      }, isInspectMode);
+      try {
+        const result = await fetchVacantHotelsWithCenterShifting({
+          checkinDate: today,
+          checkoutDate: tomorrow,
+          adultNum,
+          roomNum: 1,
+          lat: searchLat,
+          lng: searchLng,
+          searchRadius: radiusKm,
+          minCharge,
+          maxCharge
+        }, isInspectMode);
 
-      apiSuccess = result.success;
-      apiError = result.error;
-      apiStatusCode = result.statusCode;
-      upstreamDebug = result.upstreamArray; // 配列に変更
+        apiSuccess = result.collected.length > 0;
+        apiError = undefined;
+        apiStatusCode = undefined;
+        upstreamDebug = result.upstreamLogs; // 配列に変更
 
-      if (result.success && result.hotels && result.hotels.length > 0) {
-        console.log(`✅ VacantHotelSearch API成功: ${result.hotels.length}件（${result.totalPointsSearched}ポイント検索）`);
-        
-        hotels = result.hotels.map(hotelData => 
-          transformRakutenHotel(hotelData, areaName, {
-            checkinDate: today,
-            checkoutDate: tomorrow,
-            adultNum
-          })
-        );
-        isVacantData = true;
-        responseMessage = `${hotels.length}件の空室ありホテルが見つかりました（${result.totalPointsSearched}ポイント検索、半径${radiusKm}km）`;
-      } else if (result.allNotFound) {
-        // 全ポイントで404またはエラーの場合
-        console.log(`📍 All ${result.totalPointsSearched} points returned no hotels`);
+        if (result.collected.length > 0) {
+          console.log(`✅ VacantHotelSearch API成功: ${result.collected.length}件（${result.totalPointsSearched}ポイント検索）`);
+          
+          hotels = result.collected; // すでにHotel型に変換済み
+          isVacantData = true;
+          responseMessage = `${hotels.length}件の空室ありホテルが見つかりました（${result.totalPointsSearched}ポイント検索、半径${radiusKm}km）`;
+        } else {
+          // 全ポイントで0件またはエラーの場合
+          console.log(`📍 All ${result.totalPointsSearched} points returned no hotels`);
+          hotels = [];
+          isVacantData = false; // 404なので正確なVacantデータではない
+          responseMessage = '本日の空室は見つかりません（検索範囲を変えてお試しください）。';
+        }
+      } catch (error) {
+        // RAKUTEN_APP_ID未設定などの致命的エラー
+        console.error('❌ VacantHotelSearch API致命的エラー:', error);
+        apiSuccess = false;
+        apiError = error instanceof Error ? error.message : String(error);
         hotels = [];
-        isVacantData = false; // 404なので正確なVacantデータではない
-        responseMessage = '本日の空室は見つかりません（検索範囲を変えてお試しください）。';
-      } else {
-        // その他のエラー
-        console.error(`❌ VacantHotelSearch API失敗: ${apiError} (status: ${apiStatusCode})`);
-        hotels = []; // 本番では常に空配列
         isVacantData = false;
+        upstreamDebug = [];
         
-        if (apiStatusCode === 429) {
-          responseMessage = '現在混雑しています。少し時間をおいて再度お試しください。';
-        } else if (apiStatusCode === 400 || apiStatusCode === 403) {
-          responseMessage = '検索条件に問題があります。条件を変更して再度お試しください。';
-        } else if (apiStatusCode && apiStatusCode >= 500) {
-          responseMessage = 'ホテル検索サービスが一時的に利用できません。しばらく経ってから再度お試しください。';
+        if (error instanceof Error && error.message.includes('RAKUTEN_APP_ID')) {
+          responseMessage = process.env.NODE_ENV === 'production' 
+            ? 'ホテル検索サービスが一時的に利用できません。しばらく経ってから再度お試しください。'
+            : 'RAKUTEN_APP_ID not configured (development mode)';
         } else {
           responseMessage = 'ホテル検索でエラーが発生しました。ネットワーク接続を確認し、再度お試しください。';
         }
@@ -675,8 +770,8 @@ export async function GET(request: NextRequest) {
           roomNum: 1,
           originalArea: area,
           resolvedAreaName: areaName,
-          searchMethod: 'center_shifting',
-          totalPointsSearched: result?.totalPointsSearched || 'unknown'
+          searchMethod: 'robust_center_shifting',
+          totalPointsSearched: upstreamDebug?.length || 'unknown'
         },
         sampleHotelLinks: hotels.slice(0, 2).map(hotel => ({
           id: hotel.id,
@@ -700,19 +795,18 @@ export async function GET(request: NextRequest) {
 
     console.log(`🎯 検索完了: ${hotels.length}件のホテル (空室データ: ${isVacantData})`);
 
-    const jsonResponse = NextResponse.json(response);
-    jsonResponse.headers.set('Cache-Control', 'no-store');
-    return jsonResponse;
+          return jsonResponse(response);
 
   } catch (error) {
     console.error('❌ Hotel search error:', error);
     
-    const errorResponse = NextResponse.json(
+    return jsonResponse(
       {
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',
         items: [], // 本番では常に空配列（エラー時でもサンプル返却禁止）
-        fallback: true,
+        isSample: false,
+        fallback: false,
         debug: process.env.NODE_ENV === 'development' ? {
           hasAppId: !!process.env.RAKUTEN_APP_ID,
           success: false,
@@ -720,9 +814,7 @@ export async function GET(request: NextRequest) {
           apiEndpoint: 'VacantHotelSearch/20170426'
         } : undefined
       },
-      { status: 500 }
+      500
     );
-    errorResponse.headers.set('Cache-Control', 'no-store');
-    return errorResponse;
   }
 }
