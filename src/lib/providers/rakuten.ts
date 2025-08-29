@@ -117,17 +117,19 @@ function buildAffiliateUrl(targetUrl: string, affId: string): string {
       return targetUrl;
     }
 
-    // 1回だけエンコード
+    // 1回だけエンコード（必須形式）
     const encodedUrl = encodeURIComponent(targetUrl);
-    // 必ずtrailing slashを含める
+    // 必ずtrailing slashを含める（ /hgc/${affId}/?pc= 形式）
     const affiliateUrl = `https://hb.afl.rakuten.co.jp/hgc/${affId}/?pc=${encodedUrl}`;
     
-    console.log('🔗 Building affiliate link:', {
-      original: targetUrl,
-      encoded: encodedUrl,
-      affiliate: affiliateUrl,
+    console.log('🔗 Building standardized affiliate link:', {
+      originalTarget: targetUrl,
+      isHotelDetail: targetUrl.includes('travel.rakuten.co.jp/HOTEL/'),
+      encodedUrl: encodedUrl,
+      finalAffiliate: affiliateUrl,
       hasTrailingSlash: true,
-      isDoubleEncoded: false
+      isDoubleEncoded: false,
+      affiliateFormat: `/hgc/${affId}/?pc=`
     });
     
     return affiliateUrl;

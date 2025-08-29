@@ -303,15 +303,21 @@ function transformRakutenHotel(
   };
 }
 
-// API失敗時のサンプルデータ生成（本番ではダミーID除外）
+// API失敗時のサンプルデータ生成（本番では完全排除）
 function generateFallbackHotels(
   area: string, 
   count: number = 2,
   options?: { checkinDate: string; checkoutDate: string; adultNum: number }
 ): Hotel[] {
-  // 本番環境では空配列を返す（ダミーデータ非表示）
+  // 本番環境では常に空配列を返す（サンプルデータ完全禁止）
   if (process.env.NODE_ENV === 'production') {
-    console.log('⚠️ Production mode: No fallback hotels returned');
+    console.log('🚫 Production mode: Fallback hotels completely disabled');
+    return [];
+  }
+  
+  // 開発環境でも通常は空配列（明示的に開発データが必要な場合のみ）
+  if (!process.env.ENABLE_DEV_FALLBACK) {
+    console.log('ℹ️ Development mode: Fallback hotels disabled (set ENABLE_DEV_FALLBACK=true to enable)');
     return [];
   }
   
@@ -323,12 +329,12 @@ function generateFallbackHotels(
     // サンプルリンクを生成
     let affiliateUrl = 'https://travel.rakuten.co.jp/';
     if (options) {
-      affiliateUrl = generateSampleHotelLink(hotelId, `[開発用] ${area} サンプルホテル ${i}`, options);
+      affiliateUrl = generateSampleHotelLink(hotelId, `[DEV] ${area} テストホテル ${i}`, options);
     }
     
     fallbackHotels.push({
       id: hotelId,
-      name: `[開発用] ${area} サンプルホテル ${i}`,
+      name: `[DEV] ${area} テストホテル ${i}`,
       price: 3000 + Math.floor(Math.random() * 5000),
       rating: 3.5 + Math.random() * 1.5,
       imageUrl: '/placeholder-hotel.jpg',
@@ -336,7 +342,7 @@ function generateFallbackHotels(
       area,
       nearest: `${area}駅`,
       amenities: ['WiFi', 'シャワー', '2人可'],
-      isSameDayAvailable: false // サンプルデータは空室確認済みではない
+      isSameDayAvailable: false // テストデータは空室確認済みではない
     });
   }
   
@@ -385,18 +391,16 @@ export async function GET(request: NextRequest) {
       areaName = DEFAULT_SEARCH_CENTER.name;
     }
 
-    console.log('🏨 Hotel Search Request:', {
-      area,
-      areaName,
-      searchLat,
-      searchLng,
-      radiusKm,
-      checkinDate: today,
-      checkoutDate: tomorrow,
-      adultNum,
-      minCharge,
-      maxCharge,
-      amenities
+    console.log('🏨 Standardized Hotel Search Request:', {
+      originalArea: area,
+      resolvedAreaName: areaName,
+      coordinates: { lat: searchLat, lng: searchLng },
+      searchRadius: radiusKm,
+      dates: { checkinDate: today, checkoutDate: tomorrow },
+      guests: { adultNum, roomNum: 1 },
+      priceRange: { minCharge, maxCharge },
+      amenities,
+      isInspectMode
     });
 
     let hotels: Hotel[] = [];
@@ -419,8 +423,8 @@ export async function GET(request: NextRequest) {
         ? 'ホテル検索サービスが一時的に利用できません。しばらく経ってから再度お試しください。'
         : 'RAKUTEN_APP_ID not configured (development mode)';
       
-      // 本番環境では空配列、開発環境のみサンプル
-      hotels = process.env.NODE_ENV === 'production' ? [] : generateFallbackHotels(areaName, 2, {
+      // 本番環境では常に空配列
+      hotels = generateFallbackHotels(areaName, 2, {
         checkinDate: today,
         checkoutDate: tomorrow,
         adultNum
@@ -500,7 +504,7 @@ export async function GET(request: NextRequest) {
         totalPages: 1,
         hasNext: false
       },
-      isSample: !isVacantData,
+      isSample: !isVacantData && hotels.length > 0, // サンプルは実際にデータがある場合のみtrue
       fallback: !isVacantData,
       searchParams: {
         area: areaName,
@@ -510,13 +514,13 @@ export async function GET(request: NextRequest) {
         isVacantSearch: true // 常にVacantHotelSearch使用を明示
       },
       message: responseMessage,
-      debug: process.env.NODE_ENV === 'development' ? {
+      debug: isInspectMode ? {
         hasAppId: !!process.env.RAKUTEN_APP_ID,
         success: apiSuccess,
         error: apiError,
         statusCode: apiStatusCode,
         apiEndpoint: 'VacantHotelSearch/20170426',
-        searchParams: {
+        finalSearchParams: {
           lat: searchLat,
           lng: searchLng,
           radius: radiusKm,
@@ -524,7 +528,9 @@ export async function GET(request: NextRequest) {
           checkinDate: today,
           checkoutDate: tomorrow,
           adultNum,
-          roomNum: 1
+          roomNum: 1,
+          originalArea: area,
+          resolvedAreaName: areaName
         },
         sampleHotelLinks: hotels.slice(0, 2).map(hotel => ({
           id: hotel.id,
@@ -536,7 +542,10 @@ export async function GET(request: NextRequest) {
             hasTrailingSlash: hotel.affiliateUrl.includes('hgc/') && hotel.affiliateUrl.includes('/?pc='),
             isHotelDetailUrl: hotel.affiliateUrl.includes('travel.rakuten.co.jp/HOTEL/') || 
                              (hotel.affiliateUrl.includes('pc=') && 
-                              decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').includes('travel.rakuten.co.jp/HOTEL/'))
+                              decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').includes('travel.rakuten.co.jp/HOTEL/')),
+            pcDecoded: hotel.affiliateUrl.includes('pc=') ? 
+                      decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').split('&')[0] : 
+                      'not_affiliate_link'
           }
         })),
         upstream: upstreamDebug
@@ -556,11 +565,7 @@ export async function GET(request: NextRequest) {
       {
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',
-        items: generateFallbackHotels('東京都内', 2, {
-          checkinDate: todayTomorrowJST().today,
-          checkoutDate: todayTomorrowJST().tomorrow,
-          adultNum: 2
-        }),
+        items: [], // 本番では常に空配列（エラー時でもサンプル返却禁止）
         fallback: true,
         debug: process.env.NODE_ENV === 'development' ? {
           hasAppId: !!process.env.RAKUTEN_APP_ID,
