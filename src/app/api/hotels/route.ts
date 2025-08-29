@@ -25,37 +25,7 @@ interface Hotel {
   isSameDayAvailable: boolean;
 }
 
-interface RakutenVacantHotelResponse {
-  hotels?: Array<{
-    hotel: Array<{
-      hotelBasicInfo: {
-        hotelNo: number;
-        hotelName: string;
-        hotelInformationUrl: string;
-        planListUrl: string;
-        dpPlanListUrl: string;
-        reviewAverage: number;
-        userReview: string;
-        hotelImageUrl: string;
-        hotelThumbnailUrl: string;
-        latitude: number;
-        longitude: number;
-        postalCode: string;
-        address1: string;
-        address2: string;
-        telephoneNo: string;
-        faxNo: string;
-        access: string;
-        nearestStation: string;
-        hotelSpecial: string;
-        hotelMinCharge: number;
-        roomImageUrl?: string;
-      };
-    }>;
-  }>;
-  error?: string;
-  error_description?: string;
-}
+
 
 // エリア座標マッピング（標準化された緯度経度検索用）
 const AREA_COORDINATES: Record<string, { lat: number; lng: number; name: string }> = {
@@ -70,23 +40,7 @@ const AREA_COORDINATES: Record<string, { lat: number; lng: number; name: string 
 // デフォルト検索中心（新宿駅）
 const DEFAULT_SEARCH_CENTER = { lat: 35.690921, lng: 139.700258, name: '新宿駅周辺' };
 
-// ユーティリティ関数
-function safeParseJson(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    console.warn('JSON parse failed:', error);
-    return {};
-  }
-}
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function jitter(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
 
 function jsonResponse(data: any, status: number = 200): NextResponse {
   const response = NextResponse.json(data, { status });
@@ -94,207 +48,7 @@ function jsonResponse(data: any, status: number = 200): NextResponse {
   return response;
 }
 
-// 単一半径でのVacantHotelSearch API呼び出し
-async function fetchVacantHotelsSingleRadius(params: {
-  checkinDate: string;
-  checkoutDate: string;
-  adultNum: number;
-  roomNum: number;
-  lat: number;
-  lng: number;
-  searchRadius: number;
-  minCharge?: number;
-  maxCharge?: number;
-}, isInspectMode: boolean = false, retryCount: number = 0): Promise<{ 
-  data: RakutenVacantHotelResponse; 
-  success: boolean; 
-  error?: string;
-  statusCode?: number;
-  isNotFound?: boolean; // 404(not_found)の場合true
-  upstream?: {
-    url: string;
-    status: number;
-    statusText: string;
-    elapsedMs: number;
-    bodySnippet: string;
-    paramsUsed: Record<string, string>;
-    radius: number;
-  };
-}> {
-  // 関数内で環境変数を参照
-  const rakutenAppId = process.env.RAKUTEN_APP_ID;
-  
-  if (!rakutenAppId) {
-    return {
-      data: {},
-      success: false,
-      error: 'Rakuten APP_ID not configured'
-    };
-  }
 
-  // パラメータ構築（厳密な標準化）
-  const searchParams = new URLSearchParams({
-    applicationId: rakutenAppId,
-    checkinDate: params.checkinDate, // JST形式（yyyy-MM-dd）
-    checkoutDate: params.checkoutDate, // JST形式（yyyy-MM-dd）
-    adultNum: Math.max(1, Math.min(9, params.adultNum)).toString(), // 1-9人の範囲
-    roomNum: Math.max(1, Math.min(10, params.roomNum)).toString(), // 1-10室の範囲
-    responseType: 'small',
-    datumType: '1', // WGS84度単位（必須）
-    sort: '+roomCharge', // 安い順
-    hits: '30',
-    page: '1',
-    // 緯度経度検索（必須）
-    latitude: params.lat.toString(),
-    longitude: params.lng.toString(),
-    searchRadius: Math.max(1, Math.min(10, params.searchRadius)).toString() // 1-10kmの範囲
-  });
-
-  // 価格フィルタ
-  if (params.minCharge && params.minCharge > 0) {
-    searchParams.set('minCharge', params.minCharge.toString());
-  }
-  if (params.maxCharge && params.maxCharge > 0) {
-    searchParams.set('maxCharge', params.maxCharge.toString());
-  }
-
-  const apiUrl = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426?${searchParams.toString()}`;
-  const paramsUsed = Object.fromEntries(searchParams.entries());
-  
-  console.log('🔍 Rakuten VacantHotelSearch API Request:', {
-    url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
-    params: paramsUsed
-  });
-
-  const startTime = Date.now();
-
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'ShudenOutApp/1.0',
-        'Cache-Control': 'no-store'
-      },
-      cache: 'no-store' // キャッシュなし
-    });
-
-    const elapsedMs = Date.now() - startTime;
-    const responseText = await response.text();
-    
-    const upstream = isInspectMode ? {
-      url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
-      status: response.status,
-      statusText: response.statusText,
-      elapsedMs,
-      bodySnippet: responseText.slice(0, 300) + (responseText.length > 300 ? '...' : ''),
-      paramsUsed,
-      radius: params.searchRadius
-    } : undefined;
-
-    // リトライ対象のエラー判定
-    const shouldRetry = (response.status === 429 || response.status >= 500) && retryCount === 0;
-    
-    if (!response.ok) {
-      // 404の場合は特別に処理（not_foundとして扱う）
-      if (response.status === 404) {
-        let isNotFound = false;
-        try {
-          const data = JSON.parse(responseText);
-          if (data.error === 'not_found' || data.error_description?.includes('not found')) {
-            isNotFound = true;
-          }
-        } catch (parseError) {
-          // JSONパースできない場合も404として扱う
-          isNotFound = true;
-        }
-
-        return {
-          data: {},
-          success: false,
-          error: `HTTP 404: Not Found`,
-          statusCode: response.status,
-          isNotFound,
-          upstream
-        };
-      }
-
-      if (shouldRetry) {
-        console.warn(`🔄 Retrying VacantHotelSearch API (status: ${response.status}, radius: ${params.searchRadius}km)`);
-        // 300-600msのジッタ付きリトライ
-        const jitterDelay = 300 + Math.random() * 300;
-        await new Promise(resolve => setTimeout(resolve, jitterDelay));
-        return fetchVacantHotelsSingleRadius(params, isInspectMode, retryCount + 1);
-      }
-
-      return {
-        data: {},
-        success: false,
-        error: `HTTP ${response.status}: ${response.statusText}`,
-        statusCode: response.status,
-        upstream
-      };
-    }
-
-    let data: RakutenVacantHotelResponse;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      return {
-        data: {},
-        success: false,
-        error: `JSON Parse Error: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
-        statusCode: response.status,
-        upstream
-      };
-    }
-    
-    if (data.error) {
-      return {
-        data: {},
-        success: false,
-        error: `Rakuten API Error: ${data.error} - ${data.error_description}`,
-        statusCode: response.status,
-        upstream
-      };
-    }
-
-    return {
-      data,
-      success: true,
-      statusCode: response.status,
-      upstream
-    };
-
-  } catch (error) {
-    const elapsedMs = Date.now() - startTime;
-    console.error('❌ VacantHotelSearch API Network Error:', error);
-    
-    // ネットワークエラーのリトライ
-    if (retryCount === 0) {
-      console.warn(`🔄 Retrying VacantHotelSearch API (network error, radius: ${params.searchRadius}km)`);
-      const jitterDelay = 300 + Math.random() * 300;
-      await new Promise(resolve => setTimeout(resolve, jitterDelay));
-      return fetchVacantHotelsSingleRadius(params, isInspectMode, retryCount + 1);
-    }
-    
-    const upstream = isInspectMode ? {
-      url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
-      status: 0,
-      statusText: 'Network Error',
-      elapsedMs,
-      bodySnippet: error instanceof Error ? error.message : String(error),
-      paramsUsed,
-      radius: params.searchRadius
-    } : undefined;
-    
-    return {
-      data: {},
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      statusCode: 0,
-      upstream
-    };
-  }
-}
 
 
 
@@ -359,8 +113,8 @@ export async function GET(request: NextRequest) {
     const area = searchParams.get('area') || 'all';
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
-    const radius = searchParams.get('radius') || searchParams.get('radiusKm') || '3';
-    const radiusKm = Math.max(1, Math.min(3, parseFloat(radius))); // 3km上限に制限 // 1-10kmに制限
+    // 半径は常に3.0km固定（URLパラメータは無視）
+    const radiusKm = 3.0;
     const minCharge = searchParams.get('minCharge') ? parseInt(searchParams.get('minCharge')!) : undefined;
     const maxCharge = searchParams.get('maxCharge') ? parseInt(searchParams.get('maxCharge')!) : undefined;
     const adultNum = Math.max(1, Math.min(9, parseInt(searchParams.get('adultNum') || '2')));

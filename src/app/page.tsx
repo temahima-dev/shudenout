@@ -32,7 +32,6 @@ function HomeContent() {
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   // 当日空きのみ表示のため日付選択は削除
   const [adultNum, setAdultNum] = useState<number>(2);
-  const [searchRadius, setSearchRadius] = useState<number>(3); // 半径セレクタ追加
   const [displayCount, setDisplayCount] = useState<number>(30);
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -46,7 +45,7 @@ function HomeContent() {
     const amenities = searchParams.get("amenities");
     const count = searchParams.get("count");
     const adults = searchParams.get("adults");
-    const radius = searchParams.get("radius");
+
 
     if (area === "shinjuku") setAreaFilter("新宿");
     else if (area === "shibuya") setAreaFilter("渋谷");
@@ -86,15 +85,7 @@ function HomeContent() {
       setAdultNum(2); // URLパラメータがない場合のデフォルト
     }
 
-    // 半径の復元（デフォルト3km）
-    if (radius) {
-      const numRadius = parseInt(radius, 10);
-      if (!isNaN(numRadius) && numRadius >= 1 && numRadius <= 10) {
-        setSearchRadius(numRadius);
-      }
-    } else {
-      setSearchRadius(3); // URLパラメータがない場合のデフォルト
-    }
+
   }, [searchParams]);
 
   // URLクエリ更新関数
@@ -143,13 +134,8 @@ function HomeContent() {
       params.set("adults", newAdults.toString());
     }
     
-    // 半径（3km以外の場合のみ設定）
-    if (searchRadius !== 3) {
-      params.set("radius", searchRadius.toString());
-    }
-    
     router.replace(`?${params.toString()}`, { scroll: false });
-  }, [router, areaFilter, priceFilter, amenityFilters, displayCount, adultNum, searchRadius]);
+  }, [router, areaFilter, priceFilter, amenityFilters, displayCount, adultNum]);
 
   // APIからホテルデータを取得
   const fetchHotels = useCallback(async () => {
@@ -173,7 +159,7 @@ function HomeContent() {
         // 現在地を使用
         apiParams.set("lat", currentLocation.lat.toString());
         apiParams.set("lng", currentLocation.lng.toString());
-        apiParams.set("radiusKm", "1.0"); // 1km圏内
+        // 現在地検索時も3km固定
       } else if (areaFilter !== "全て") {
         // エリアフィルタを使用
         const areaMap = {
@@ -203,8 +189,7 @@ function HomeContent() {
       // 人数
       apiParams.set("adultNum", adultNum.toString());
       
-      // 検索半径
-      apiParams.set("radius", searchRadius.toString());
+      // 検索半径は3km固定（内部処理）
       
       // 設備フィルタ
       if (amenityFilters.length > 0) {
@@ -275,7 +260,7 @@ function HomeContent() {
       setLoading(false);
       setAbortController(null);
     }
-  }, [areaFilter, priceFilter, amenityFilters, displayCount, adultNum, searchRadius, abortController, useCurrentLocation, currentLocation]);
+  }, [areaFilter, priceFilter, amenityFilters, displayCount, adultNum, abortController, useCurrentLocation, currentLocation]);
   
   // デバウンス付きでAPIを呼び出し
   useEffect(() => {
@@ -284,7 +269,7 @@ function HomeContent() {
     }, 250);
     
     return () => clearTimeout(timeoutId);
-  }, [areaFilter, priceFilter, amenityFilters, displayCount, adultNum, searchRadius]);
+  }, [areaFilter, priceFilter, amenityFilters, displayCount, adultNum]);
 
   // APIで既にフィルタリング済み
   const filteredHotels = hotels;
@@ -438,38 +423,21 @@ function HomeContent() {
             <p className="text-sm text-gray-600 mb-4">
               本日→明日の空室があるホテルのみを表示しています。終電後にすぐ行ける宿だけ！
             </p>
-                               {/* 人数・半径選択 */}
-                   <div className="flex items-center space-x-6">
-                     <div className="flex items-center space-x-2">
-                       <label className="text-sm font-medium text-gray-700">
-                         人数:
-                       </label>
-                       <select
-                         value={adultNum}
-                         onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
-                         className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm text-gray-900"
-                       >
-                         <option value={1}>1人</option>
-                         <option value={2}>2人</option>
-                         <option value={3}>3人</option>
-                         <option value={4}>4人</option>
-                       </select>
-                     </div>
-                     
-                     <div className="flex items-center space-x-2">
-                       <label className="text-sm font-medium text-gray-700">
-                         検索範囲:
-                       </label>
-                       <select
-                         value={searchRadius}
-                         onChange={(e) => setSearchRadius(parseInt(e.target.value))}
-                         className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm text-gray-900"
-                       >
-                                      <option value={1}>最短 (1km)</option>
-             <option value={2}>近場 (2km)</option>
-             <option value={3}>標準 (3km)</option>
-                       </select>
-                     </div>
+                               {/* 人数選択 */}
+                   <div className="flex items-center space-x-2">
+                     <label className="text-sm font-medium text-gray-700">
+                       人数:
+                     </label>
+                     <select
+                       value={adultNum}
+                       onChange={(e) => handleAdultNumChange(parseInt(e.target.value))}
+                       className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm text-gray-900"
+                     >
+                       <option value={1}>1人</option>
+                       <option value={2}>2人</option>
+                       <option value={3}>3人</option>
+                       <option value={4}>4人</option>
+                     </select>
                    </div>
           </div>
 
@@ -519,7 +487,7 @@ function HomeContent() {
             {useCurrentLocation && currentLocation && (
               <div className="mt-4 p-3 bg-green-100 rounded-lg">
                 <p className="text-sm text-green-700 flex items-center justify-center">
-                  ✅ 現在地周辺のホテルを表示中 (半径2km以内)
+                  ✅ 現在地周辺のホテルを表示中
                 </p>
               </div>
             )}
@@ -707,16 +675,9 @@ function HomeContent() {
                     本日の空室が見つかりません
                   </h3>
                   <p className="text-gray-600 mb-6">
-                    現在、当日空室のあるホテルが見つかりませんでした。<br />
-                    <strong>検索範囲を「標準 (3km)」</strong>に変更するか、エリアを変更してお試しください。
+                    本日の空室は見つかりませんでした。エリアを変えてお試しください。
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <button
-                      onClick={() => setSearchRadius(3)}
-                      className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200"
-                    >
-                      範囲を広げる (3km)
-                    </button>
+                  <div className="flex justify-center">
                     <button
                       onClick={handleResetFilters}
                       className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200"
