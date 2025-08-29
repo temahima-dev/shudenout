@@ -465,9 +465,9 @@ function HomeContent() {
                          onChange={(e) => setSearchRadius(parseInt(e.target.value))}
                          className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm text-gray-900"
                        >
-                         <option value={2}>近場 (2km)</option>
-                         <option value={3}>標準 (3km)</option>
-                         <option value={5}>広め (5km)</option>
+                                      <option value={1}>最短 (1km)</option>
+             <option value={2}>近場 (2km)</option>
+             <option value={3}>標準 (3km)</option>
                        </select>
                      </div>
                    </div>
@@ -708,14 +708,14 @@ function HomeContent() {
                   </h3>
                   <p className="text-gray-600 mb-6">
                     現在、当日空室のあるホテルが見つかりませんでした。<br />
-                    <strong>検索範囲を「広め (5km)」</strong>に変更するか、エリアを変更してお試しください。
+                    <strong>検索範囲を「標準 (3km)」</strong>に変更するか、エリアを変更してお試しください。
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <button
-                      onClick={() => setSearchRadius(5)}
+                      onClick={() => setSearchRadius(3)}
                       className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200"
                     >
-                      範囲を広げる (5km)
+                      範囲を広げる (3km)
                     </button>
                     <button
                       onClick={handleResetFilters}
