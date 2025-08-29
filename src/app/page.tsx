@@ -701,22 +701,30 @@ function HomeContent() {
             <p className="text-gray-600 mt-2">ホテルを検索中...</p>
           </div>
         ) : filteredHotels.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🏨</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              空室が確認できるホテルがありません
-            </h3>
-            <p className="text-gray-600 mb-6">
-              現在、当日空室のあるホテルが見つかりませんでした。<br />
-              時間をおいて再度検索するか、エリアを変更してお試しください。
-            </p>
-            <button
-              onClick={handleResetFilters}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200"
-            >
-              条件リセット
-            </button>
-          </div>
+                          <div className="text-center py-12">
+                  <div className="text-6xl mb-4">🏨</div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    本日の空室が見つかりません
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    現在、当日空室のあるホテルが見つかりませんでした。<br />
+                    <strong>検索範囲を「広め (5km)」</strong>に変更するか、エリアを変更してお試しください。
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                      onClick={() => setSearchRadius(5)}
+                      className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200"
+                    >
+                      範囲を広げる (5km)
+                    </button>
+                    <button
+                      onClick={handleResetFilters}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200"
+                    >
+                      条件リセット
+                    </button>
+                  </div>
+                </div>
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
