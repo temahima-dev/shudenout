@@ -183,34 +183,52 @@ export async function GET(request: NextRequest) {
         adultNum
       });
     } else {
-      // 二段階パイプライン: 候補取得 → 空室判定
+      // 二段階パイプライン: 候補取得 → 空室判定（デバッグ強化版）
       console.log('🔍 Starting two-stage pipeline: candidates → vacancy check...');
       
       try {
-        let candidateCount = 0;
-        let chunks: any[] = [];
+        let candidateDebugInfo: any = {};
+        let vacancyDebugInfo: any = {};
         
-        // Stage 1: 施設候補取得
-        const candidateNos = await fetchCandidates({
+        // Stage 1: 施設候補取得（堅牢化版）
+        const candidatesResult = await fetchCandidates({
           lat: searchLat,
           lng: searchLng,
           radius: radiusKm,
           areaCode: area !== 'all' ? area : undefined,
           rakutenAppId
-        });
+        }, isInspectMode);
 
-        candidateCount = candidateNos.length;
+        const candidateNos = candidatesResult.candidateNos;
+        const candidateCount = candidateNos.length;
+        candidateDebugInfo = candidatesResult.debugInfo;
         
         if (candidateCount === 0) {
           console.log('📍 No hotel candidates found in target area');
           hotels = [];
           isVacantData = false;
-          apiSuccess = false;
+          apiSuccess = false; // 候補0は検索失敗とみなす
           apiError = 'No candidates found';
-          upstreamDebug = [];
-          responseMessage = '対象エリアで施設が見つかりません。エリアを変えてお試しください。';
+          responseMessage = '対象エリアで施設が見つかりませんでした。エリアを変えてお試しください。';
+          
+          upstreamDebug = isInspectMode ? {
+            pipeline: 'two_stage',
+            candidateSource: candidateDebugInfo.source,
+            candidateParams: {
+              url: candidateDebugInfo.url,
+              paramsUsed: candidateDebugInfo.paramsUsed,
+              elapsedMs: candidateDebugInfo.totalElapsedMs,
+              status: candidateDebugInfo.attempts?.[0]?.status || 'unknown',
+              bodySnippetHead: candidateDebugInfo.attempts?.[0]?.bodySnippetHead || 'no data'
+            },
+            candidateCount: 0,
+            vacancy: {
+              chunkSize: 15,
+              chunks: []
+            }
+          } : [];
         } else {
-          // Stage 2: 空室判定
+          // Stage 2: 空室判定（堅牢化版）
           const vacancyResult = await checkVacancy(candidateNos, {
             checkinDate: today,
             checkoutDate: tomorrow,
@@ -219,7 +237,7 @@ export async function GET(request: NextRequest) {
             rakutenAppId
           }, isInspectMode);
 
-          chunks = vacancyResult.chunks;
+          vacancyDebugInfo = vacancyResult.chunks;
           
           if (vacancyResult.vacantHotels.length > 0) {
             console.log(`✅ Two-stage pipeline success: ${vacancyResult.vacantHotels.length} vacant hotels from ${candidateCount} candidates`);
@@ -238,23 +256,31 @@ export async function GET(request: NextRequest) {
             console.log(`📍 No vacant hotels found from ${candidateCount} candidates`);
             hotels = [];
             isVacantData = false;
-            apiSuccess = true; // 候補はあったが空室なしは正常
+            apiSuccess = true; // 候補はあったが空室なしは正常な結果
             responseMessage = '本日の空室は見つかりません。エリアを変えてお試しください。';
           }
           
           upstreamDebug = isInspectMode ? {
             pipeline: 'two_stage',
+            candidateSource: candidateDebugInfo.source,
+            candidateParams: {
+              url: candidateDebugInfo.url,
+              paramsUsed: candidateDebugInfo.paramsUsed,
+              elapsedMs: candidateDebugInfo.totalElapsedMs,
+              status: candidateDebugInfo.attempts?.[0]?.status || 'unknown',
+              bodySnippetHead: candidateDebugInfo.attempts?.[0]?.bodySnippetHead || 'no data'
+            },
             candidateCount,
-            chunks,
-            paramsUsed: {
-              lat: searchLat,
-              lng: searchLng,
-              datumType: 1,
-              radius: radiusKm,
-              checkinDate: today,
-              checkoutDate: tomorrow,
-              adultNum,
-              roomNum: 1
+            vacancy: {
+              chunkSize: 15,
+              chunks: vacancyDebugInfo.map((chunk: any) => ({
+                from: chunk.from,
+                to: chunk.to,
+                status: chunk.status,
+                elapsedMs: chunk.elapsedMs,
+                bodySnippetHead: chunk.bodySnippetHead || 'no data',
+                foundCount: chunk.foundCount || 0
+              }))
             }
           } : [];
         }
@@ -277,11 +303,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 設備フィルタを適用
-    if (amenities.length > 0) {
+    // 設備フィルタを適用（inspect=1時はスキップ可能）
+    const skipFilters = isInspectMode && searchParams.get('skip_filters') === '1';
+    
+    if (!skipFilters && amenities.length > 0) {
+      const beforeFilterCount = hotels.length;
       hotels = hotels.filter(hotel =>
         amenities.every(amenity => hotel.amenities.includes(amenity))
       );
+      console.log(`🔍 Applied amenity filters: ${beforeFilterCount} → ${hotels.length} hotels`);
+    } else if (skipFilters && amenities.length > 0) {
+      console.log(`🔍 Skipping amenity filters (debug mode): ${amenities.join(', ')}`);
     }
 
     // 価格でソート（安い順）
@@ -305,45 +337,47 @@ export async function GET(request: NextRequest) {
         isVacantSearch: true // 常にVacantHotelSearch使用を明示
       },
       message: responseMessage,
-      debug: isInspectMode ? {
-        hasAppId: !!process.env.RAKUTEN_APP_ID,
-        success: apiSuccess,
-        error: apiError,
-        statusCode: apiStatusCode,
-        apiEndpoint: 'VacantHotelSearch/20170426',
-        finalSearchParams: {
-          lat: searchLat,
-          lng: searchLng,
-          radius: radiusKm,
-          datumType: 1,
-          checkinDate: today,
-          checkoutDate: tomorrow,
-          adultNum,
-          roomNum: 1,
-          originalArea: area,
-          resolvedAreaName: areaName,
-          searchMethod: 'two_stage_pipeline',
-          candidateCount: upstreamDebug?.candidateCount || 'unknown',
-          chunksProcessed: upstreamDebug?.chunks?.length || 'unknown'
-        },
-        sampleHotelLinks: hotels.slice(0, 2).map(hotel => ({
-          id: hotel.id,
-          name: hotel.name,
-          affiliateUrl: hotel.affiliateUrl,
-          finalHrefSample: hotel.affiliateUrl,
-          linkAnalysis: {
-            isAffiliateLink: hotel.affiliateUrl.includes('hb.afl.rakuten.co.jp'),
-            hasTrailingSlash: hotel.affiliateUrl.includes('hgc/') && hotel.affiliateUrl.includes('/?pc='),
-            isHotelDetailUrl: hotel.affiliateUrl.includes('travel.rakuten.co.jp/HOTEL/') || 
-                             (hotel.affiliateUrl.includes('pc=') && 
-                              decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').includes('travel.rakuten.co.jp/HOTEL/')),
-            pcDecoded: hotel.affiliateUrl.includes('pc=') ? 
-                      decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').split('&')[0] : 
-                      'not_affiliate_link'
-          }
-        })),
-        upstream: Array.isArray(upstreamDebug) ? upstreamDebug : (upstreamDebug ? [upstreamDebug] : [])
-      } : undefined
+              debug: isInspectMode ? {
+          hasAppId: !!process.env.RAKUTEN_APP_ID,
+          success: apiSuccess,
+          error: apiError,
+          statusCode: apiStatusCode,
+          apiEndpoint: 'VacantHotelSearch/20170426',
+          finalSearchParams: {
+            lat: searchLat,
+            lng: searchLng,
+            radius: radiusKm,
+            datumType: 1,
+            checkinDate: today,
+            checkoutDate: tomorrow,
+            adultNum,
+            roomNum: 1,
+            originalArea: area,
+            resolvedAreaName: areaName,
+            searchMethod: 'two_stage_pipeline',
+            candidateCount: upstreamDebug?.candidateCount || 'unknown',
+            chunksProcessed: upstreamDebug?.vacancy?.chunks?.length || 'unknown',
+            filtersSkipped: skipFilters,
+            requestedAmenities: amenities
+          },
+          sampleHotelLinks: hotels.slice(0, 2).map(hotel => ({
+            id: hotel.id,
+            name: hotel.name,
+            affiliateUrl: hotel.affiliateUrl,
+            finalHrefSample: hotel.affiliateUrl,
+            linkAnalysis: {
+              isAffiliateLink: hotel.affiliateUrl.includes('hb.afl.rakuten.co.jp'),
+              hasTrailingSlash: hotel.affiliateUrl.includes('hgc/') && hotel.affiliateUrl.includes('/?pc='),
+              isHotelDetailUrl: hotel.affiliateUrl.includes('travel.rakuten.co.jp/HOTEL/') || 
+                               (hotel.affiliateUrl.includes('pc=') && 
+                                decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').includes('travel.rakuten.co.jp/HOTEL/')),
+              pcDecoded: hotel.affiliateUrl.includes('pc=') ? 
+                        decodeURIComponent(hotel.affiliateUrl.split('pc=')[1] || '').split('&')[0] : 
+                        'not_affiliate_link'
+            }
+          })),
+          upstream: Array.isArray(upstreamDebug) ? upstreamDebug : (upstreamDebug ? [upstreamDebug] : [])
+        } : undefined
     };
 
     console.log(`🎯 検索完了: ${hotels.length}件のホテル (空室データ: ${isVacantData})`);

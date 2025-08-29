@@ -395,53 +395,149 @@ export function generateSampleHotelLink(
   return convertToAffiliateLink(directUrl, affiliateId);
 }
 
-// 二段階パイプライン：施設候補取得
+// 二段階パイプライン：施設候補取得（堅牢化版）
 export async function fetchCandidates(params: {
   lat?: number;
   lng?: number;
   radius?: number;
   areaCode?: string;
   rakutenAppId: string;
-}): Promise<string[]> {
+}, isInspectMode: boolean = false): Promise<{
+  candidateNos: string[];
+  debugInfo: {
+    source: 'HotelSearch' | 'SimpleHotelSearch' | 'AreaCode';
+    url: string;
+    paramsUsed: Record<string, string>;
+    attempts: Array<{
+      page: number;
+      status: number;
+      elapsedMs: number;
+      bodySnippetHead: string;
+      foundCount: number;
+    }>;
+    totalElapsedMs: number;
+    totalPages: number;
+  };
+}> {
   const { lat, lng, radius = 3.0, areaCode, rakutenAppId } = params;
   const hotelNos = new Set<string>();
+  const debugAttempts: any[] = [];
+  const startTime = Date.now();
 
   console.log('🔍 Stage 1: Fetching hotel candidates...');
 
-  // 優先ルート1: SimpleHotelSearch で座標検索
-  if (lat && lng) {
-    try {
-      const searchParams = new URLSearchParams({
-        applicationId: rakutenAppId,
-        latitude: lat.toString(),
-        longitude: lng.toString(),
-        searchRadius: radius.toString(),
-        datumType: '1',
-        hits: '100',
-        responseType: 'small'
-      });
+  let apiSource: 'HotelSearch' | 'SimpleHotelSearch' | 'AreaCode' = 'SimpleHotelSearch';
+  let baseUrl = '';
+  let baseParams: Record<string, string> = {};
 
-      const url = `https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426?${searchParams}`;
-      console.log('🎯 Calling SimpleHotelSearch for candidates...');
-      
-      const response = await fetch(url, { cache: 'no-store' });
-      const text = await response.text();
-      
-      if (response.ok) {
-        const json = JSON.parse(text);
-        if (json.hotels && Array.isArray(json.hotels)) {
-          // ユーティリティ関数を使用して候補を抽出
-          const candidates = mapHotelSearchJsonToCandidates(json);
-          for (const candidate of candidates) {
-            hotelNos.add(candidate);
-          }
-          console.log(`✅ SimpleHotelSearch: ${hotelNos.size} candidates found`);
-        }
+  // 優先ルート1: 座標検索（複数ページ対応）
+  if (lat && lng) {
+    // 必須パラメータを明示して構築
+    baseParams = {
+      applicationId: rakutenAppId,
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      searchRadius: radius.toString(),
+      datumType: '1', // WGS84度単位（必須）
+      hits: '100',
+      responseType: 'small'
+    };
+
+    // まずHotelSearchを試行、失敗したらSimpleHotelSearchにフォールバック
+    let useHotelSearch = true;
+    for (const tryHotelSearch of [true, false]) {
+      if (tryHotelSearch) {
+        apiSource = 'HotelSearch';
+        baseUrl = 'https://app.rakuten.co.jp/services/api/Travel/HotelSearch/20170426';
       } else {
-        console.warn(`⚠️ SimpleHotelSearch failed: ${response.status}`);
+        apiSource = 'SimpleHotelSearch';
+        baseUrl = 'https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426';
       }
-    } catch (error) {
-      console.error('❌ SimpleHotelSearch error:', error);
+
+      console.log(`🎯 Trying ${apiSource} for candidates...`);
+
+      // 最大3ページまで試行
+      for (let page = 1; page <= 3; page++) {
+        try {
+          const searchParams = new URLSearchParams(baseParams);
+          searchParams.set('page', page.toString());
+
+          const url = `${baseUrl}?${searchParams}`;
+          const pageStartTime = Date.now();
+          
+          const response = await fetch(url, { cache: 'no-store' });
+          const elapsedMs = Date.now() - pageStartTime;
+          const text = await response.text();
+          
+          const attempt = {
+            page,
+            status: response.status,
+            elapsedMs,
+            bodySnippetHead: text.slice(0, 300),
+            foundCount: 0
+          };
+
+          if (response.ok) {
+            try {
+              const json = JSON.parse(text);
+              if (json.hotels && Array.isArray(json.hotels)) {
+                const candidates = mapHotelSearchJsonToCandidates(json);
+                const beforeSize = hotelNos.size;
+                for (const candidate of candidates) {
+                  hotelNos.add(candidate);
+                }
+                attempt.foundCount = hotelNos.size - beforeSize;
+                console.log(`✅ ${apiSource} page ${page}: ${attempt.foundCount} new candidates (total: ${hotelNos.size})`);
+                
+                // 新しい候補が見つからなくなったら次のページは不要
+                if (attempt.foundCount === 0 && page > 1) {
+                  debugAttempts.push(attempt);
+                  break;
+                }
+              } else {
+                console.log(`ℹ️ ${apiSource} page ${page}: No hotels in response`);
+              }
+              
+              debugAttempts.push(attempt);
+              
+              // 1ページ目が成功したらHotelSearchで続行
+              if (page === 1) {
+                useHotelSearch = tryHotelSearch;
+                break; // 他のAPIは試さない
+              }
+              
+            } catch (parseError) {
+              console.error(`❌ ${apiSource} page ${page} JSON parse error:`, parseError);
+              attempt.foundCount = 0;
+              debugAttempts.push(attempt);
+              break; // JSONエラーで次ページは不要
+            }
+          } else {
+            console.warn(`⚠️ ${apiSource} page ${page} failed: ${response.status}`);
+            debugAttempts.push(attempt);
+            
+            // 4xx/5xxエラーでは次ページは期待できない
+            if (response.status >= 400) {
+              break;
+            }
+          }
+        } catch (error) {
+          console.error(`❌ ${apiSource} page ${page} error:`, error);
+          debugAttempts.push({
+            page,
+            status: 0,
+            elapsedMs: 0,
+            bodySnippetHead: error instanceof Error ? error.message : String(error),
+            foundCount: 0
+          });
+          break; // ネットワークエラーで次ページは不要
+        }
+      }
+
+      // 候補が取得できたら、もう他のAPIは試さない
+      if (hotelNos.size > 0) {
+        break;
+      }
     }
   }
 
@@ -449,13 +545,26 @@ export async function fetchCandidates(params: {
   if (areaCode && hotelNos.size < 50) {
     console.log('🏛️ Area code search not yet implemented');
     // TODO: GetAreaClass → HotelSearch with area codes
+    apiSource = 'AreaCode';
   }
 
-  console.log(`🎯 Stage 1 completed: ${hotelNos.size} unique candidates`);
-  return Array.from(hotelNos);
+  const totalElapsedMs = Date.now() - startTime;
+  console.log(`🎯 Stage 1 completed: ${hotelNos.size} unique candidates in ${totalElapsedMs}ms`);
+
+  return {
+    candidateNos: Array.from(hotelNos),
+    debugInfo: {
+      source: apiSource,
+      url: baseUrl,
+      paramsUsed: baseParams,
+      attempts: debugAttempts,
+      totalElapsedMs,
+      totalPages: debugAttempts.length
+    }
+  };
 }
 
-// 二段階パイプライン：空室判定
+// 二段階パイプライン：空室判定（堅牢化版）
 export async function checkVacancy(
   hotelNos: string[],
   params: {
@@ -474,121 +583,156 @@ export async function checkVacancy(
     hotelNos: string[];
     status: number;
     elapsedMs: number;
-    count: number;
-    bodySnippet?: string;
+    foundCount: number;
+    bodySnippetHead?: string;
+    retryAttempted?: boolean;
+    retrySuccess?: boolean;
   }>;
 }> {
   const { checkinDate, checkoutDate, adultNum, roomNum, rakutenAppId } = params;
   const vacantHotels: any[] = [];
   const chunks: any[] = [];
   const chunkSize = 15; // VacantHotelSearchの制限
+  const maxConcurrency = 3; // 並列度を制限
 
-  console.log(`🔍 Stage 2: Checking vacancy for ${hotelNos.length} candidates...`);
+  console.log(`🔍 Stage 2: Checking vacancy for ${hotelNos.length} candidates in ${Math.ceil(hotelNos.length / chunkSize)} chunks...`);
 
-  // チャンクに分割して並列処理
-  const chunkPromises: Promise<void>[] = [];
-  
+  // チャンクに分割
+  const allChunks: Array<{ hotelNos: string[]; from: number; to: number; index: number }> = [];
   for (let i = 0; i < hotelNos.length; i += chunkSize) {
     const chunkHotelNos = hotelNos.slice(i, i + chunkSize);
-    const chunkIndex = Math.floor(i / chunkSize);
-    
-    chunkPromises.push(
-      (async () => {
-        try {
-          const vacantParams = new URLSearchParams({
-            applicationId: rakutenAppId,
-            checkinDate,
-            checkoutDate,
-            adultNum: adultNum.toString(),
-            roomNum: roomNum.toString(),
-            hotelNo: chunkHotelNos.join(','),
-            responseType: 'small'
-          });
-
-          const url = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426?${vacantParams}`;
-          
-          console.log(`🎯 Chunk ${chunkIndex + 1}: Checking ${chunkHotelNos.length} hotels...`);
-          
-          const t0 = Date.now();
-          const response = await fetch(url, { cache: 'no-store' });
-          const elapsedMs = Date.now() - t0;
-          const text = await response.text();
-          
-          const chunkResult = {
-            from: i,
-            to: i + chunkHotelNos.length - 1,
-            hotelNos: chunkHotelNos,
-            status: response.status,
-            elapsedMs,
-            count: 0,
-            ...(isInspectMode && { bodySnippet: text.slice(0, 300) })
-          };
-
-          if (response.status === 200) {
-            const json = JSON.parse(text);
-            if (json.hotels && Array.isArray(json.hotels)) {
-              for (const hotel of json.hotels) {
-                vacantHotels.push(hotel);
-              }
-              chunkResult.count = json.hotels.length;
-              console.log(`✅ Chunk ${chunkIndex + 1}: ${json.hotels.length} vacant hotels found`);
-            } else {
-              console.log(`ℹ️ Chunk ${chunkIndex + 1}: 0 vacant hotels`);
-            }
-          } else if (response.status === 404) {
-            console.log(`📍 Chunk ${chunkIndex + 1}: Not found (404) - treated as 0 vacant`);
-          } else if (response.status === 429 || response.status >= 500) {
-            console.warn(`⚠️ Chunk ${chunkIndex + 1}: API error (${response.status}), attempting retry...`);
-            
-            // 1回だけリトライ
-            await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 300));
-            
-            const retryT0 = Date.now();
-            const retryResponse = await fetch(url, { cache: 'no-store' });
-            const retryElapsedMs = Date.now() - retryT0;
-            const retryText = await retryResponse.text();
-            
-            chunkResult.status = retryResponse.status;
-            chunkResult.elapsedMs += retryElapsedMs;
-            if (isInspectMode) {
-              chunkResult.bodySnippet = retryText.slice(0, 300);
-            }
-
-            if (retryResponse.status === 200) {
-              const retryJson = JSON.parse(retryText);
-              if (retryJson.hotels && Array.isArray(retryJson.hotels)) {
-                for (const hotel of retryJson.hotels) {
-                  vacantHotels.push(hotel);
-                }
-                chunkResult.count = retryJson.hotels.length;
-                console.log(`✅ Chunk ${chunkIndex + 1} retry: ${retryJson.hotels.length} vacant hotels found`);
-              }
-            } else {
-              console.error(`❌ Chunk ${chunkIndex + 1} retry failed: ${retryResponse.status}`);
-            }
-          } else {
-            console.warn(`⚠️ Chunk ${chunkIndex + 1}: Parameter error (${response.status})`);
-          }
-
-          chunks.push(chunkResult);
-        } catch (error) {
-          console.error(`❌ Chunk ${chunkIndex + 1} error:`, error);
-          chunks.push({
-            from: i,
-            to: i + chunkHotelNos.length - 1,
-            hotelNos: chunkHotelNos,
-            status: 0,
-            elapsedMs: 0,
-            count: 0,
-            ...(isInspectMode && { bodySnippet: error instanceof Error ? error.message : String(error) })
-          });
-        }
-      })()
-    );
+    allChunks.push({
+      hotelNos: chunkHotelNos,
+      from: i,
+      to: i + chunkHotelNos.length - 1,
+      index: Math.floor(i / chunkSize)
+    });
   }
 
-  // 全チャンクの完了を待つ
-  await Promise.all(chunkPromises);
+  // 並列度制御でチャンクを処理
+  const processChunk = async (chunk: typeof allChunks[0]) => {
+    const { hotelNos: chunkHotelNos, from, to, index } = chunk;
+    
+    try {
+      const vacantParams = new URLSearchParams({
+        applicationId: rakutenAppId,
+        checkinDate,
+        checkoutDate,
+        adultNum: adultNum.toString(),
+        roomNum: roomNum.toString(),
+        hotelNo: chunkHotelNos.join(','),
+        responseType: 'small'
+      });
+
+      const url = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426?${vacantParams}`;
+      
+      console.log(`🎯 Chunk ${index + 1}/${allChunks.length}: Checking ${chunkHotelNos.length} hotels...`);
+      
+      let totalElapsedMs = 0;
+      let finalStatus = 0;
+      let finalText = '';
+      let retryAttempted = false;
+      let retrySuccess = false;
+      let foundHotels: any[] = [];
+
+      // 初回試行
+      const t0 = Date.now();
+      const response = await fetch(url, { cache: 'no-store' });
+      const elapsedMs = Date.now() - t0;
+      totalElapsedMs += elapsedMs;
+      const text = await response.text();
+      
+      finalStatus = response.status;
+      finalText = text;
+
+      if (response.status === 200) {
+        try {
+          const json = JSON.parse(text);
+          if (json.hotels && Array.isArray(json.hotels)) {
+            foundHotels = json.hotels;
+            console.log(`✅ Chunk ${index + 1}: ${json.hotels.length} vacant hotels found`);
+          } else {
+            console.log(`ℹ️ Chunk ${index + 1}: 0 vacant hotels`);
+          }
+        } catch (parseError) {
+          console.error(`❌ Chunk ${index + 1} JSON parse error:`, parseError);
+        }
+      } else if (response.status === 404) {
+        console.log(`📍 Chunk ${index + 1}: Not found (404) - treated as 0 vacant`);
+      } else if (response.status === 429 || response.status >= 500) {
+        console.warn(`⚠️ Chunk ${index + 1}: API error (${response.status}), attempting retry...`);
+        
+        // リトライ実行
+        retryAttempted = true;
+        const jitterDelay = 300 + Math.random() * 300;
+        await new Promise(resolve => setTimeout(resolve, jitterDelay));
+        
+        const retryT0 = Date.now();
+        const retryResponse = await fetch(url, { cache: 'no-store' });
+        const retryElapsedMs = Date.now() - retryT0;
+        totalElapsedMs += retryElapsedMs;
+        const retryText = await retryResponse.text();
+        
+        finalStatus = retryResponse.status;
+        finalText = retryText;
+
+        if (retryResponse.status === 200) {
+          retrySuccess = true;
+          try {
+            const retryJson = JSON.parse(retryText);
+            if (retryJson.hotels && Array.isArray(retryJson.hotels)) {
+              foundHotels = retryJson.hotels;
+              console.log(`✅ Chunk ${index + 1} retry: ${retryJson.hotels.length} vacant hotels found`);
+            }
+          } catch (parseError) {
+            console.error(`❌ Chunk ${index + 1} retry JSON parse error:`, parseError);
+          }
+        } else {
+          console.error(`❌ Chunk ${index + 1} retry failed: ${retryResponse.status}`);
+        }
+      } else {
+        console.warn(`⚠️ Chunk ${index + 1}: Parameter error (${response.status})`);
+      }
+
+      // スレッドセーフに結果を追加
+      for (const hotel of foundHotels) {
+        vacantHotels.push(hotel);
+      }
+
+      const chunkResult = {
+        from,
+        to,
+        hotelNos: chunkHotelNos,
+        status: finalStatus,
+        elapsedMs: totalElapsedMs,
+        foundCount: foundHotels.length,
+        ...(isInspectMode && { bodySnippetHead: finalText.slice(0, 300) }),
+        ...(retryAttempted && { retryAttempted, retrySuccess })
+      };
+
+      chunks.push(chunkResult);
+      
+    } catch (error) {
+      console.error(`❌ Chunk ${index + 1} error:`, error);
+      chunks.push({
+        from,
+        to,
+        hotelNos: chunkHotelNos,
+        status: 0,
+        elapsedMs: 0,
+        foundCount: 0,
+        ...(isInspectMode && { bodySnippetHead: error instanceof Error ? error.message : String(error) })
+      });
+    }
+  };
+
+  // 並列度制御でチャンクを実行
+  const results = [];
+  for (let i = 0; i < allChunks.length; i += maxConcurrency) {
+    const batch = allChunks.slice(i, i + maxConcurrency);
+    const batchPromises = batch.map(processChunk);
+    results.push(...await Promise.allSettled(batchPromises));
+  }
 
   console.log(`🎯 Stage 2 completed: ${vacantHotels.length} vacant hotels from ${chunks.length} chunks`);
 
