@@ -56,9 +56,9 @@ interface RakutenVacantHotelResponse {
   error_description?: string;
 }
 
-// エリア座標マッピング
+// エリア座標マッピング（標準化された緯度経度検索用）
 const AREA_COORDINATES: Record<string, { lat: number; lng: number; name: string }> = {
-  'shinjuku': { lat: 35.6896, lng: 139.6917, name: '新宿' },
+  'shinjuku': { lat: 35.690921, lng: 139.700258, name: '新宿' },
   'shibuya': { lat: 35.6580, lng: 139.7016, name: '渋谷' },
   'ueno': { lat: 35.7141, lng: 139.7774, name: '上野' },
   'shinbashi': { lat: 35.6662, lng: 139.7580, name: '新橋' },
@@ -66,21 +66,25 @@ const AREA_COORDINATES: Record<string, { lat: number; lng: number; name: string 
   'roppongi': { lat: 35.6627, lng: 139.7314, name: '六本木' }
 };
 
-// 楽天Travel VacantHotelSearch API 呼び出し
+// デフォルト検索中心（新宿駅）
+const DEFAULT_SEARCH_CENTER = { lat: 35.690921, lng: 139.700258, name: '新宿駅周辺' };
+
+// 楽天Travel VacantHotelSearch API 呼び出し（リトライ機能付き）
 async function fetchVacantHotels(params: {
   checkinDate: string;
   checkoutDate: string;
   adultNum: number;
   roomNum: number;
-  lat?: number;
-  lng?: number;
-  searchRadius?: number;
+  lat: number; // 必須：常に緯度経度検索
+  lng: number; // 必須：常に緯度経度検索
+  searchRadius: number; // 必須：常に指定
   minCharge?: number;
   maxCharge?: number;
-}, isInspectMode: boolean = false): Promise<{ 
+}, isInspectMode: boolean = false, retryCount: number = 0): Promise<{ 
   data: RakutenVacantHotelResponse; 
   success: boolean; 
   error?: string;
+  statusCode?: number;
   upstream?: {
     url: string;
     status: number;
@@ -101,26 +105,23 @@ async function fetchVacantHotels(params: {
     };
   }
 
-  // パラメータ構築（必須パラメータを強制）
+  // パラメータ構築（厳密な標準化）
   const searchParams = new URLSearchParams({
     applicationId: rakutenAppId,
     checkinDate: params.checkinDate, // JST形式（yyyy-MM-dd）
     checkoutDate: params.checkoutDate, // JST形式（yyyy-MM-dd）
-    adultNum: Math.max(1, params.adultNum || 2).toString(), // 最低1人、デフォルト2人
-    roomNum: Math.max(1, params.roomNum || 1).toString(), // 最低1室、デフォルト1室
+    adultNum: Math.max(1, Math.min(9, params.adultNum)).toString(), // 1-9人の範囲
+    roomNum: Math.max(1, Math.min(10, params.roomNum)).toString(), // 1-10室の範囲
     responseType: 'small',
     datumType: '1', // WGS84度単位（必須）
     sort: '+roomCharge', // 安い順
     hits: '30',
-    page: '1'
+    page: '1',
+    // 緯度経度検索（必須）
+    latitude: params.lat.toString(),
+    longitude: params.lng.toString(),
+    searchRadius: Math.max(1, Math.min(10, params.searchRadius)).toString() // 1-10kmの範囲
   });
-
-  // 位置情報が指定されている場合（必須パラメータ追加）
-  if (params.lat && params.lng) {
-    searchParams.set('latitude', params.lat.toString());
-    searchParams.set('longitude', params.lng.toString());
-    searchParams.set('searchRadius', Math.max(1, params.searchRadius || 3).toString()); // 最低1km
-  }
 
   // 価格フィルタ
   if (params.minCharge && params.minCharge > 0) {
@@ -152,13 +153,6 @@ async function fetchVacantHotels(params: {
     const elapsedMs = Date.now() - startTime;
     const responseText = await response.text();
     
-    let data: RakutenVacantHotelResponse;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      throw new Error(`JSON Parse Error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-    }
-
     const upstream = isInspectMode ? {
       url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
       status: response.status,
@@ -168,11 +162,36 @@ async function fetchVacantHotels(params: {
       paramsUsed
     } : undefined;
 
+    // リトライ対象のエラー判定
+    const shouldRetry = (response.status === 429 || response.status >= 500) && retryCount === 0;
+    
     if (!response.ok) {
+      if (shouldRetry) {
+        console.warn(`🔄 Retrying VacantHotelSearch API (status: ${response.status})`);
+        // 300-600msのジッタ付きリトライ
+        const jitterDelay = 300 + Math.random() * 300;
+        await new Promise(resolve => setTimeout(resolve, jitterDelay));
+        return fetchVacantHotels(params, isInspectMode, retryCount + 1);
+      }
+
       return {
         data: {},
         success: false,
         error: `HTTP ${response.status}: ${response.statusText}`,
+        statusCode: response.status,
+        upstream
+      };
+    }
+
+    let data: RakutenVacantHotelResponse;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      return {
+        data: {},
+        success: false,
+        error: `JSON Parse Error: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        statusCode: response.status,
         upstream
       };
     }
@@ -182,6 +201,7 @@ async function fetchVacantHotels(params: {
         data: {},
         success: false,
         error: `Rakuten API Error: ${data.error} - ${data.error_description}`,
+        statusCode: response.status,
         upstream
       };
     }
@@ -189,12 +209,21 @@ async function fetchVacantHotels(params: {
     return {
       data,
       success: true,
+      statusCode: response.status,
       upstream
     };
 
   } catch (error) {
     const elapsedMs = Date.now() - startTime;
-    console.error('❌ VacantHotelSearch API Error:', error);
+    console.error('❌ VacantHotelSearch API Network Error:', error);
+    
+    // ネットワークエラーのリトライ
+    if (retryCount === 0) {
+      console.warn('🔄 Retrying VacantHotelSearch API (network error)');
+      const jitterDelay = 300 + Math.random() * 300;
+      await new Promise(resolve => setTimeout(resolve, jitterDelay));
+      return fetchVacantHotels(params, isInspectMode, retryCount + 1);
+    }
     
     const upstream = isInspectMode ? {
       url: apiUrl.replace(rakutenAppId, 'APP_ID_HIDDEN'),
@@ -209,6 +238,7 @@ async function fetchVacantHotels(params: {
       data: {},
       success: false,
       error: error instanceof Error ? error.message : String(error),
+      statusCode: 0,
       upstream
     };
   }
@@ -320,36 +350,39 @@ export async function GET(request: NextRequest) {
     // 常に当日→明日の日付を使用（JST）
     const { today, tomorrow } = todayTomorrowJST();
     
-    // パラメータ取得
+    // パラメータ取得（標準化）
     const area = searchParams.get('area') || 'all';
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
-    const radiusKm = parseFloat(searchParams.get('radiusKm') || '3.0');
+    const radius = searchParams.get('radius') || searchParams.get('radiusKm') || '3';
+    const radiusKm = Math.max(1, Math.min(10, parseFloat(radius))); // 1-10kmに制限
     const minCharge = searchParams.get('minCharge') ? parseInt(searchParams.get('minCharge')!) : undefined;
     const maxCharge = searchParams.get('maxCharge') ? parseInt(searchParams.get('maxCharge')!) : undefined;
-    const adultNum = parseInt(searchParams.get('adultNum') || '2');
+    const adultNum = Math.max(1, Math.min(9, parseInt(searchParams.get('adultNum') || '2')));
     const amenities = searchParams.get('amenities')?.split(',').filter(Boolean) || [];
     const isInspectMode = searchParams.get('inspect') === '1';
 
-    let searchLat: number | undefined;
-    let searchLng: number | undefined;
-    let areaName = 'その他';
+    // 座標の決定（必ず緯度経度検索）
+    let searchLat: number;
+    let searchLng: number;
+    let areaName: string;
 
-    // 座標の決定（現在地 > エリア指定の優先順位）
     if (lat && lng) {
+      // ユーザー指定の座標を使用
       searchLat = parseFloat(lat);
       searchLng = parseFloat(lng);
-      areaName = '現在地周辺';
+      areaName = '指定座標周辺';
     } else if (area !== 'all' && AREA_COORDINATES[area]) {
+      // エリア名から事前定義座標を使用
       const coords = AREA_COORDINATES[area];
       searchLat = coords.lat;
       searchLng = coords.lng;
       areaName = coords.name;
-    } else if (area === 'all') {
-      // 全て選択時は新宿を中心に検索
-      searchLat = AREA_COORDINATES.shinjuku.lat;
-      searchLng = AREA_COORDINATES.shinjuku.lng;
-      areaName = '東京都内';
+    } else {
+      // デフォルト：新宿駅を中心に検索
+      searchLat = DEFAULT_SEARCH_CENTER.lat;
+      searchLng = DEFAULT_SEARCH_CENTER.lng;
+      areaName = DEFAULT_SEARCH_CENTER.name;
     }
 
     console.log('🏨 Hotel Search Request:', {
@@ -370,7 +403,9 @@ export async function GET(request: NextRequest) {
     let isVacantData = false;
     let apiSuccess = false;
     let apiError: string | undefined;
+    let apiStatusCode: number | undefined;
     let upstreamDebug: any = undefined;
+    let responseMessage: string;
 
     // 楽天APP_IDが設定されているかチェック
     const rakutenAppId = process.env.RAKUTEN_APP_ID;
@@ -380,16 +415,19 @@ export async function GET(request: NextRequest) {
       apiSuccess = false;
       apiError = 'RAKUTEN_APP_ID not configured';
       isVacantData = false;
+      responseMessage = process.env.NODE_ENV === 'production' 
+        ? 'ホテル検索サービスが一時的に利用できません。しばらく経ってから再度お試しください。'
+        : 'RAKUTEN_APP_ID not configured (development mode)';
       
-      // 開発環境のみフォールバックデータを返す
-      hotels = generateFallbackHotels(areaName, 2, {
+      // 本番環境では空配列、開発環境のみサンプル
+      hotels = process.env.NODE_ENV === 'production' ? [] : generateFallbackHotels(areaName, 2, {
         checkinDate: today,
         checkoutDate: tomorrow,
         adultNum
       });
     } else {
       // 楽天VacantHotelSearch API呼び出し（必須実行）
-      console.log('🔍 Calling VacantHotelSearch API (sameDay=1 equivalent)...');
+      console.log('🔍 Calling VacantHotelSearch API with standardized params...');
       
       const result = await fetchVacantHotels({
         checkinDate: today,
@@ -405,6 +443,7 @@ export async function GET(request: NextRequest) {
 
       apiSuccess = result.success;
       apiError = result.error;
+      apiStatusCode = result.statusCode;
       upstreamDebug = result.upstream;
 
       if (result.success && result.data.hotels && result.data.hotels.length > 0) {
@@ -418,20 +457,28 @@ export async function GET(request: NextRequest) {
           })
         );
         isVacantData = true;
+        responseMessage = `${hotels.length}件の空室ありホテルが見つかりました`;
       } else if (result.success && (!result.data.hotels || result.data.hotels.length === 0)) {
-        // API成功だが0件の場合：空室なしとして空配列を返す（サンプルデータは使わない）
+        // API成功だが0件の場合：空室なしとして空配列を返す
         console.log('ℹ️ VacantHotelSearch API成功: 空室ホテル0件');
         hotels = [];
         isVacantData = true; // API自体は成功
+        responseMessage = '本日の空室が見つかりません。エリアを変えるか、半径を広げて再検索してください。';
       } else {
-        // API失敗またはエラーレスポンスの場合のみフォールバック
-        console.error(`❌ VacantHotelSearch API失敗: ${apiError}`);
-        hotels = generateFallbackHotels(areaName, 2, {
-          checkinDate: today,
-          checkoutDate: tomorrow,
-          adultNum
-        });
+        // API失敗時のエラーメッセージ分岐
+        console.error(`❌ VacantHotelSearch API失敗: ${apiError} (status: ${apiStatusCode})`);
+        hotels = []; // 本番では常に空配列
         isVacantData = false;
+        
+        if (apiStatusCode === 429) {
+          responseMessage = '現在混雑しています。少し時間をおいて再度お試しください。';
+        } else if (apiStatusCode === 400 || apiStatusCode === 403) {
+          responseMessage = '検索条件に問題があります。条件を変更して再度お試しください。';
+        } else if (apiStatusCode && apiStatusCode >= 500) {
+          responseMessage = 'ホテル検索サービスが一時的に利用できません。しばらく経ってから再度お試しください。';
+        } else {
+          responseMessage = 'ホテル検索でエラーが発生しました。ネットワーク接続を確認し、再度お試しください。';
+        }
       }
     }
 
@@ -462,18 +509,23 @@ export async function GET(request: NextRequest) {
         adultNum,
         isVacantSearch: true // 常にVacantHotelSearch使用を明示
       },
-      message: isVacantData 
-        ? hotels.length > 0 
-          ? `${hotels.length}件の空室ありホテルが見つかりました` 
-          : '申し訳ございません。本日は空室のあるホテルがありません。時間をおいて再度お試しください。'
-        : process.env.NODE_ENV === 'production'
-          ? '申し訳ございません。現在、ホテル検索サービスが利用できません。しばらく経ってから再度お試しください。'
-          : 'APIエラーのため開発用サンプルデータを表示しています',
+      message: responseMessage,
       debug: process.env.NODE_ENV === 'development' ? {
         hasAppId: !!process.env.RAKUTEN_APP_ID,
         success: apiSuccess,
         error: apiError,
+        statusCode: apiStatusCode,
         apiEndpoint: 'VacantHotelSearch/20170426',
+        searchParams: {
+          lat: searchLat,
+          lng: searchLng,
+          radius: radiusKm,
+          datumType: 1,
+          checkinDate: today,
+          checkoutDate: tomorrow,
+          adultNum,
+          roomNum: 1
+        },
         sampleHotelLinks: hotels.slice(0, 2).map(hotel => ({
           id: hotel.id,
           name: hotel.name,
