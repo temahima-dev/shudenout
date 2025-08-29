@@ -3,6 +3,8 @@
  * VacantHotelSearchから取得したホテル情報を適切なリンクに変換
  */
 
+import { mapHotelSearchJsonToCandidates } from './rakuten-utils';
+
 interface HotelBasicInfo {
   hotelNo: number;
   hotelName: string;
@@ -428,11 +430,10 @@ export async function fetchCandidates(params: {
       if (response.ok) {
         const json = JSON.parse(text);
         if (json.hotels && Array.isArray(json.hotels)) {
-          for (const hotel of json.hotels) {
-            const hotelNo = hotel.hotel?.[0]?.hotelBasicInfo?.hotelNo;
-            if (hotelNo) {
-              hotelNos.add(hotelNo.toString());
-            }
+          // ユーティリティ関数を使用して候補を抽出
+          const candidates = mapHotelSearchJsonToCandidates(json);
+          for (const candidate of candidates) {
+            hotelNos.add(candidate);
           }
           console.log(`✅ SimpleHotelSearch: ${hotelNos.size} candidates found`);
         }

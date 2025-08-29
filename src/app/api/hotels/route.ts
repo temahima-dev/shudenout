@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { todayTomorrowJST } from '@/lib/date';
 import { generateRakutenHotelLink, generateSampleHotelLink, validateRakutenLink, fetchCandidates, checkVacancy } from '@/lib/providers/rakuten';
+import { transformRakutenHotel, mapVacantJsonToHotels } from '@/lib/providers/rakuten-utils';
 
 // Force dynamic rendering and use Node.js runtime
 export const runtime = 'nodejs';
@@ -295,119 +296,11 @@ async function fetchVacantHotelsSingleRadius(params: {
   }
 }
 
-// 二段階パイプライン用の楽天レスポンス変換関数
-function transformRakutenHotel(
-  rakutenHotel: any, 
-  area: string = 'その他',
-  options: { checkinDate: string; checkoutDate: string; adultNum: number }
-): Hotel {
-  const hotelInfo = rakutenHotel.hotel[0].hotelBasicInfo;
-  
-  // 設備推定（実際のAPIでは詳細設備情報が限定的）
-  const amenities: string[] = [];
-  if (hotelInfo.hotelSpecial) {
-    if (hotelInfo.hotelSpecial.includes('駐車場')) amenities.push('駐車場');
-    if (hotelInfo.hotelSpecial.includes('大浴場')) amenities.push('大浴場');
-    if (hotelInfo.hotelSpecial.includes('温泉')) amenities.push('温泉');
-    if (hotelInfo.hotelSpecial.includes('WiFi') || hotelInfo.hotelSpecial.includes('無線LAN')) amenities.push('WiFi');
-  }
 
-  // 楽天リンクの生成
-  const linkResult = generateRakutenHotelLink(hotelInfo, options);
-  
-  return {
-    id: hotelInfo.hotelNo?.toString() || `hotel-${Date.now()}`,
-    name: hotelInfo.hotelName || 'ホテル名不明',
-    area,
-    price: hotelInfo.hotelMinCharge || 0,
-    imageUrl: hotelInfo.hotelImageUrl || '/placeholder-hotel.jpg',
-    rating: parseFloat(hotelInfo.reviewAverage || '0'),
-    reviewCount: parseInt(hotelInfo.reviewCount || '0'),
-    affiliateUrl: linkResult.finalUrl,
-    description: hotelInfo.hotelSpecial || '',
-    amenities,
-    location: {
-      address: hotelInfo.address1 || '',
-      latitude: parseFloat(hotelInfo.latitude || '0'),
-      longitude: parseFloat(hotelInfo.longitude || '0')
-    },
-    nearest: hotelInfo.nearestStation || area,
-    isSameDayAvailable: true, // VacantHotelSearchで取得したので当日空室あり
-    accessInfo: hotelInfo.access || ''
-  };
-}
 
-// 楽天VacantHotelSearchのJSONレスポンスからHotel配列に変換
-function mapVacantJsonToHotels(json: any): Hotel[] {
-  if (!json || !json.hotels || !Array.isArray(json.hotels)) {
-    return [];
-  }
-  
-  return json.hotels.map((hotelData: any) => transformRakutenHotel(hotelData, 'VacantSearch', {
-    checkinDate: '',
-    checkoutDate: '',
-    adultNum: 2
-  }));
-}
 
-// 楽天レスポンスをHotel型に変換
-function transformRakutenHotel(
-  rakutenHotel: any, 
-  area: string = 'その他',
-  options: { checkinDate: string; checkoutDate: string; adultNum: number }
-): Hotel {
-  const hotelInfo = rakutenHotel.hotel[0].hotelBasicInfo;
-  
-  // 設備推定（実際のAPIでは詳細設備情報が限定的）
-  const amenities: string[] = [];
-  if (hotelInfo.hotelSpecial) {
-    if (hotelInfo.hotelSpecial.includes('Wi-Fi') || hotelInfo.hotelSpecial.includes('wifi')) {
-      amenities.push('WiFi');
-    }
-    if (hotelInfo.hotelSpecial.includes('シャワー') || hotelInfo.hotelSpecial.includes('バス')) {
-      amenities.push('シャワー');
-    }
-  }
-  amenities.push('2人可'); // 空室検索結果なので基本的に利用可能
 
-  // 適切なホテルリンクを生成
-  const linkResult = generateRakutenHotelLink(hotelInfo, {
-    checkinDate: options.checkinDate,
-    checkoutDate: options.checkoutDate,
-    adultNum: options.adultNum,
-    roomNum: 1
-  });
 
-  // リンクの有効性を検証
-  const validation = validateRakutenLink(linkResult.finalUrl);
-  
-  console.log(`🔗 Hotel ${hotelInfo.hotelNo} (${hotelInfo.hotelName}) link:`, {
-    source: linkResult.source,
-    status: linkResult.debug.status,
-    sourceUrl: linkResult.debug.sourceUrl,
-    finalUrl: linkResult.finalUrl,
-    validation: validation.isValid ? '✅ Valid' : `❌ ${validation.reason}`,
-    usedSource: linkResult.debug.usedSource,
-    hasAffiliate: linkResult.debug.hasAffiliate,
-    hasTrailingSlash: linkResult.debug.hasTrailingSlash,
-    isDoubleEncoded: linkResult.debug.isDoubleEncoded
-  });
-
-  return {
-    id: hotelInfo.hotelNo.toString(),
-    name: hotelInfo.hotelName,
-    price: hotelInfo.hotelMinCharge,
-    rating: hotelInfo.reviewAverage > 0 ? hotelInfo.reviewAverage : undefined,
-    imageUrl: hotelInfo.hotelImageUrl || hotelInfo.hotelThumbnailUrl || '/placeholder-hotel.jpg',
-    affiliateUrl: linkResult.finalUrl,
-    area,
-    nearest: hotelInfo.nearestStation || hotelInfo.access.split('、')[0] || 'その他',
-    amenities,
-    latitude: hotelInfo.latitude,
-    longitude: hotelInfo.longitude,
-    isSameDayAvailable: true // VacantHotelSearchの結果は空室ありのホテル
-  };
-}
 
 // API失敗時のサンプルデータ生成（本番では完全排除）
 function generateFallbackHotels(
