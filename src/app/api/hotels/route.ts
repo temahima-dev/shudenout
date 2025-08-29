@@ -207,9 +207,18 @@ export async function GET(request: NextRequest) {
           console.log('📍 No hotel candidates found in target area');
           hotels = [];
           isVacantData = false;
-          apiSuccess = false; // 候補0は検索失敗とみなす
-          apiError = 'No candidates found';
-          responseMessage = '対象エリアで施設が見つかりませんでした。エリアを変えてお試しください。';
+          
+          // APIエラーと候補0件を区別する
+          const apiStatus = candidateDebugInfo.attempts?.[0]?.status || 0;
+          if (apiStatus >= 400 || apiStatus === 0) {
+            apiSuccess = false;
+            apiError = `Candidate API error (status: ${apiStatus})`;
+            responseMessage = 'ホテル検索APIでエラーが発生しました。ネットワーク接続を確認し、再度お試しください。';
+          } else {
+            apiSuccess = true; // API成功だが候補0件
+            apiError = undefined;
+            responseMessage = '対象エリアで施設が見つかりませんでした。エリアを変えてお試しください。';
+          }
           
           upstreamDebug = isInspectMode ? {
             pipeline: 'two_stage',
@@ -218,7 +227,7 @@ export async function GET(request: NextRequest) {
               url: candidateDebugInfo.url,
               paramsUsed: candidateDebugInfo.paramsUsed,
               elapsedMs: candidateDebugInfo.totalElapsedMs,
-              status: candidateDebugInfo.attempts?.[0]?.status || 'unknown',
+              status: apiStatus,
               bodySnippetHead: candidateDebugInfo.attempts?.[0]?.bodySnippetHead || 'no data'
             },
             candidateCount: 0,

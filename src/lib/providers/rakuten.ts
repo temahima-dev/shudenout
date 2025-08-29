@@ -405,7 +405,7 @@ export async function fetchCandidates(params: {
 }, isInspectMode: boolean = false): Promise<{
   candidateNos: string[];
   debugInfo: {
-    source: 'HotelSearch' | 'SimpleHotelSearch' | 'AreaCode';
+    source: 'SimpleHotelSearch' | 'AreaCode';
     url: string;
     paramsUsed: Record<string, string>;
     attempts: Array<{
@@ -426,126 +426,181 @@ export async function fetchCandidates(params: {
 
   console.log('🔍 Stage 1: Fetching hotel candidates...');
 
-  let apiSource: 'HotelSearch' | 'SimpleHotelSearch' | 'AreaCode' = 'SimpleHotelSearch';
+  let apiSource: 'SimpleHotelSearch' | 'AreaCode' = 'SimpleHotelSearch';
   let baseUrl = '';
   let baseParams: Record<string, string> = {};
 
-  // 優先ルート1: 座標検索（複数ページ対応）
+  // 優先ルート1: SimpleHotelSearch（座標検索）
   if (lat && lng) {
     // 必須パラメータを明示して構築
     baseParams = {
       applicationId: rakutenAppId,
       latitude: lat.toString(),
       longitude: lng.toString(),
-      searchRadius: radius.toString(),
+      searchRadius: "3", // 固定3km
       datumType: '1', // WGS84度単位（必須）
-      hits: '100',
+      hits: '30',
+      page: '1',
       responseType: 'small'
     };
 
-    // まずHotelSearchを試行、失敗したらSimpleHotelSearchにフォールバック
-    let useHotelSearch = true;
-    for (const tryHotelSearch of [true, false]) {
-      if (tryHotelSearch) {
-        apiSource = 'HotelSearch';
-        baseUrl = 'https://app.rakuten.co.jp/services/api/Travel/HotelSearch/20170426';
-      } else {
-        apiSource = 'SimpleHotelSearch';
-        baseUrl = 'https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426';
-      }
+    apiSource = 'SimpleHotelSearch';
+    baseUrl = 'https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426';
 
-      console.log(`🎯 Trying ${apiSource} for candidates...`);
+    console.log(`🎯 Using SimpleHotelSearch for candidates...`);
 
-      // 最大3ページまで試行
-      for (let page = 1; page <= 3; page++) {
-        try {
-          const searchParams = new URLSearchParams(baseParams);
-          searchParams.set('page', page.toString());
+    // 最大3ページまで試行
+    for (let page = 1; page <= 3; page++) {
+      try {
+        const searchParams = new URLSearchParams(baseParams);
+        searchParams.set('page', page.toString());
 
-          const url = `${baseUrl}?${searchParams}`;
-          const pageStartTime = Date.now();
-          
-          const response = await fetch(url, { cache: 'no-store' });
-          const elapsedMs = Date.now() - pageStartTime;
-          const text = await response.text();
-          
-          const attempt = {
-            page,
-            status: response.status,
-            elapsedMs,
-            bodySnippetHead: text.slice(0, 300),
-            foundCount: 0
-          };
+        const url = `${baseUrl}?${searchParams}`;
+        const pageStartTime = Date.now();
+        
+        const response = await fetch(url, { cache: 'no-store' });
+        const elapsedMs = Date.now() - pageStartTime;
+        const text = await response.text();
+        
+        const attempt = {
+          page,
+          status: response.status,
+          elapsedMs,
+          bodySnippetHead: text.slice(0, 300),
+          foundCount: 0
+        };
 
-          if (response.ok) {
-            try {
-              const json = JSON.parse(text);
-              if (json.hotels && Array.isArray(json.hotels)) {
-                const candidates = mapHotelSearchJsonToCandidates(json);
-                const beforeSize = hotelNos.size;
-                for (const candidate of candidates) {
-                  hotelNos.add(candidate);
-                }
-                attempt.foundCount = hotelNos.size - beforeSize;
-                console.log(`✅ ${apiSource} page ${page}: ${attempt.foundCount} new candidates (total: ${hotelNos.size})`);
-                
-                // 新しい候補が見つからなくなったら次のページは不要
-                if (attempt.foundCount === 0 && page > 1) {
-                  debugAttempts.push(attempt);
-                  break;
-                }
-              } else {
-                console.log(`ℹ️ ${apiSource} page ${page}: No hotels in response`);
+        if (response.ok) {
+          try {
+            const json = JSON.parse(text);
+            if (json.hotels && Array.isArray(json.hotels)) {
+              const candidates = mapHotelSearchJsonToCandidates(json);
+              const beforeSize = hotelNos.size;
+              for (const candidate of candidates) {
+                hotelNos.add(candidate);
               }
+              attempt.foundCount = hotelNos.size - beforeSize;
+              console.log(`✅ SimpleHotelSearch page ${page}: ${attempt.foundCount} new candidates (total: ${hotelNos.size})`);
               
-              debugAttempts.push(attempt);
-              
-              // 1ページ目が成功したらHotelSearchで続行
-              if (page === 1) {
-                useHotelSearch = tryHotelSearch;
-                break; // 他のAPIは試さない
+              // 新しい候補が見つからなくなったら次のページは不要
+              if (attempt.foundCount === 0 && page > 1) {
+                debugAttempts.push(attempt);
+                break;
               }
-              
-            } catch (parseError) {
-              console.error(`❌ ${apiSource} page ${page} JSON parse error:`, parseError);
-              attempt.foundCount = 0;
-              debugAttempts.push(attempt);
-              break; // JSONエラーで次ページは不要
+            } else {
+              console.log(`ℹ️ SimpleHotelSearch page ${page}: No hotels in response`);
             }
-          } else {
-            console.warn(`⚠️ ${apiSource} page ${page} failed: ${response.status}`);
+            
             debugAttempts.push(attempt);
             
-            // 4xx/5xxエラーでは次ページは期待できない
-            if (response.status >= 400) {
-              break;
-            }
+          } catch (parseError) {
+            console.error(`❌ SimpleHotelSearch page ${page} JSON parse error:`, parseError);
+            attempt.foundCount = 0;
+            debugAttempts.push(attempt);
+            break; // JSONエラーで次ページは不要
           }
-        } catch (error) {
-          console.error(`❌ ${apiSource} page ${page} error:`, error);
-          debugAttempts.push({
-            page,
-            status: 0,
-            elapsedMs: 0,
-            bodySnippetHead: error instanceof Error ? error.message : String(error),
-            foundCount: 0
-          });
-          break; // ネットワークエラーで次ページは不要
+        } else {
+          console.warn(`⚠️ SimpleHotelSearch page ${page} failed: ${response.status}`);
+          debugAttempts.push(attempt);
+          
+          // 4xx/5xxエラーでは次ページは期待できない
+          if (response.status >= 400) {
+            break;
+          }
         }
-      }
-
-      // 候補が取得できたら、もう他のAPIは試さない
-      if (hotelNos.size > 0) {
-        break;
+      } catch (error) {
+        console.error(`❌ SimpleHotelSearch page ${page} error:`, error);
+        debugAttempts.push({
+          page,
+          status: 0,
+          elapsedMs: 0,
+          bodySnippetHead: error instanceof Error ? error.message : String(error),
+          foundCount: 0
+        });
+        break; // ネットワークエラーで次ページは不要
       }
     }
   }
 
-  // 優先ルート2: 地区コード検索（将来実装）
-  if (areaCode && hotelNos.size < 50) {
-    console.log('🏛️ Area code search not yet implemented');
-    // TODO: GetAreaClass → HotelSearch with area codes
-    apiSource = 'AreaCode';
+  // 優先ルート2: エリアコード検索（フォールバック）
+  if ((areaCode && hotelNos.size < 10) || hotelNos.size === 0) {
+    console.log('🏛️ Attempting area code fallback...');
+    
+    // エリアコードマッピング
+    const areaCodeMap: Record<string, string> = {
+      'shinjuku': 'tokyo',
+      'shibuya': 'tokyo',
+      'ueno': 'tokyo',
+      'shinbashi': 'tokyo',
+      'ikebukuro': 'tokyo',
+      'roppongi': 'tokyo',
+      'all': 'tokyo'
+    };
+    
+    const targetAreaCode = areaCodeMap[areaCode || 'all'] || 'tokyo';
+    
+    try {
+      const areaParams = {
+        applicationId: rakutenAppId,
+        largeClassCode: targetAreaCode,
+        hits: '30',
+        page: '1',
+        responseType: 'small'
+      };
+      
+      const areaSearchParams = new URLSearchParams(areaParams);
+      const areaUrl = `https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426?${areaSearchParams}`;
+      
+      console.log(`🎯 Trying area code fallback for ${targetAreaCode}...`);
+      
+      const areaStartTime = Date.now();
+      const areaResponse = await fetch(areaUrl, { cache: 'no-store' });
+      const areaElapsedMs = Date.now() - areaStartTime;
+      const areaText = await areaResponse.text();
+      
+      const areaAttempt = {
+        page: 1,
+        status: areaResponse.status,
+        elapsedMs: areaElapsedMs,
+        bodySnippetHead: areaText.slice(0, 300),
+        foundCount: 0
+      };
+      
+      if (areaResponse.ok) {
+        try {
+          const areaJson = JSON.parse(areaText);
+          if (areaJson.hotels && Array.isArray(areaJson.hotels)) {
+            const areaCandidates = mapHotelSearchJsonToCandidates(areaJson);
+            const beforeAreaSize = hotelNos.size;
+            for (const candidate of areaCandidates) {
+              hotelNos.add(candidate);
+            }
+            areaAttempt.foundCount = hotelNos.size - beforeAreaSize;
+            console.log(`✅ Area code fallback: ${areaAttempt.foundCount} new candidates (total: ${hotelNos.size})`);
+            
+            apiSource = 'AreaCode';
+            baseUrl = areaUrl;
+            baseParams = areaParams;
+          }
+        } catch (parseError) {
+          console.error(`❌ Area code fallback JSON parse error:`, parseError);
+        }
+      } else {
+        console.warn(`⚠️ Area code fallback failed: ${areaResponse.status}`);
+      }
+      
+      debugAttempts.push(areaAttempt);
+      
+    } catch (error) {
+      console.error(`❌ Area code fallback error:`, error);
+      debugAttempts.push({
+        page: 1,
+        status: 0,
+        elapsedMs: 0,
+        bodySnippetHead: error instanceof Error ? error.message : String(error),
+        foundCount: 0
+      });
+    }
   }
 
   const totalElapsedMs = Date.now() - startTime;
