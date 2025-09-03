@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import Footer from "@/app/components/Footer";
 import StructuredData from "@/app/components/StructuredData";
 import GoogleAnalytics from "@/app/components/GoogleAnalytics";
@@ -37,6 +38,19 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <head>
+        {/* Google tag (gtag.js) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-P2JPNCL5DG"
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-P2JPNCL5DG');
+          `}
+        </Script>
         <StructuredData data={websiteStructuredData} />
       </head>
       <body
