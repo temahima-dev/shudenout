@@ -431,12 +431,13 @@ export async function fetchCandidates(params: {
   let baseParams: Record<string, string> = {};
 
   // 優先ルート1: SimpleHotelSearch（座標検索）
-  if (lat && lng) {
-    // 必須パラメータを明示して構築
+  if (lat && lng || areaCode) {
+    // 楽天SimpleHotelSearch APIの必須パラメータを構築
     baseParams = {
       applicationId: process.env.NEXT_PUBLIC_RAKUTEN_APP_ID || '',
-      latitude: lat.toString(),
-      longitude: lng.toString(),
+      format: "json",
+      latitude: lat?.toString() || "35.6905", // 新宿デフォルト
+      longitude: lng?.toString() || "139.7004", // 新宿デフォルト
       searchRadius: "3", // 固定3km
       datumType: '1', // WGS84度単位（必須）
       hits: '30',
@@ -456,6 +457,7 @@ export async function fetchCandidates(params: {
         searchParams.set('page', page.toString());
 
         const url = `${baseUrl}?${searchParams}`;
+        console.log("FETCH URL:", url);
         const pageStartTime = Date.now();
         
         const response = await fetch(url, { cache: 'no-store' });
