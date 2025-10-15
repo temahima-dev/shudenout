@@ -197,7 +197,8 @@ function HomeContent() {
       }
       
       // 当日空室検索API呼び出し（重複防止付き）
-      const apiUrl = `/api/hotels`;
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
+      const apiUrl = `${baseUrl}/api/hotels`;
       const apiParamsObj = Object.fromEntries(apiParams.entries());
       
       // デバッグ用ログ

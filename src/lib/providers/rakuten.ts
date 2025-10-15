@@ -445,7 +445,7 @@ export async function fetchCandidates(params: {
     };
 
     apiSource = 'SimpleHotelSearch';
-    baseUrl = 'https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426';
+    baseUrl = process.env.NEXT_PUBLIC_RAKUTEN_BASE_URL || 'https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426';
 
     console.log(`🎯 Using SimpleHotelSearch for candidates...`);
 
@@ -549,7 +549,8 @@ export async function fetchCandidates(params: {
       };
       
       const areaSearchParams = new URLSearchParams(areaParams);
-      const areaUrl = `https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426?${areaSearchParams}`;
+      const rakutenBaseUrl = process.env.NEXT_PUBLIC_RAKUTEN_BASE_URL || 'https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426';
+      const areaUrl = `${rakutenBaseUrl}?${areaSearchParams}`;
       
       console.log(`🎯 Trying area code fallback for ${targetAreaCode}...`);
       
@@ -679,7 +680,8 @@ export async function checkVacancy(
         responseType: 'small'
       });
 
-      const url = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426?${vacantParams}`;
+      const vacantBaseUrl = 'https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426';
+      const url = `${vacantBaseUrl}?${vacantParams}`;
       
       console.log(`🎯 Chunk ${index + 1}/${allChunks.length}: Checking ${chunkHotelNos.length} hotels...`);
       
