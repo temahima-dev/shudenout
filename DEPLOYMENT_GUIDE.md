@@ -124,3 +124,6 @@ Hope this helps fellow travelers!
 問題が発生した場合は環境変数や楽天API設定を再確認してください。
 
 
+
+
+

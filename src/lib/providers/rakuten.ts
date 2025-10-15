@@ -434,7 +434,7 @@ export async function fetchCandidates(params: {
   if (lat && lng) {
     // 必須パラメータを明示して構築
     baseParams = {
-      applicationId: rakutenAppId,
+      applicationId: process.env.NEXT_PUBLIC_RAKUTEN_APP_ID || '',
       latitude: lat.toString(),
       longitude: lng.toString(),
       searchRadius: "3", // 固定3km
@@ -541,7 +541,7 @@ export async function fetchCandidates(params: {
     
     try {
       const areaParams = {
-        applicationId: rakutenAppId,
+        applicationId: process.env.NEXT_PUBLIC_RAKUTEN_APP_ID || '',
         largeClassCode: targetAreaCode,
         hits: '30',
         page: '1',
@@ -671,7 +671,7 @@ export async function checkVacancy(
     
     try {
       const vacantParams = new URLSearchParams({
-        applicationId: rakutenAppId,
+        applicationId: process.env.NEXT_PUBLIC_RAKUTEN_APP_ID || '',
         checkinDate,
         checkoutDate,
         adultNum: adultNum.toString(),

@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
       status: 'success',
       message: 'API test successful',
       timestamp: new Date().toISOString(),
-      hasRakutenKey: !!process.env.RAKUTEN_APP_ID
+      hasRakutenKey: !!process.env.NEXT_PUBLIC_RAKUTEN_APP_ID
     });
   } catch (error) {
     return NextResponse.json(

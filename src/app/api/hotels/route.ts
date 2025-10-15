@@ -165,16 +165,16 @@ export async function GET(request: NextRequest) {
     let responseMessage: string;
 
     // 楽天APP_IDが設定されているかチェック
-    const rakutenAppId = process.env.RAKUTEN_APP_ID;
+    const rakutenAppId = process.env.NEXT_PUBLIC_RAKUTEN_APP_ID;
     
     if (!rakutenAppId) {
-      console.error('❌ RAKUTEN_APP_ID not configured');
+      console.error('❌ NEXT_PUBLIC_RAKUTEN_APP_ID not configured');
       apiSuccess = false;
-      apiError = 'RAKUTEN_APP_ID not configured';
+      apiError = 'NEXT_PUBLIC_RAKUTEN_APP_ID not configured';
       isVacantData = false;
       responseMessage = process.env.NODE_ENV === 'production' 
         ? 'ホテル検索サービスが一時的に利用できません。しばらく経ってから再度お試しください。'
-        : 'RAKUTEN_APP_ID not configured (development mode)';
+        : 'NEXT_PUBLIC_RAKUTEN_APP_ID not configured (development mode)';
       
       // 本番環境では常に空配列
       hotels = generateFallbackHotels(areaName, 2, {
@@ -302,10 +302,10 @@ export async function GET(request: NextRequest) {
         isVacantData = false;
         upstreamDebug = [];
         
-        if (error instanceof Error && error.message.includes('RAKUTEN_APP_ID')) {
+        if (error instanceof Error && error.message.includes('NEXT_PUBLIC_RAKUTEN_APP_ID')) {
           responseMessage = process.env.NODE_ENV === 'production' 
             ? 'ホテル検索サービスが一時的に利用できません。しばらく経ってから再度お試しください。'
-            : 'RAKUTEN_APP_ID not configured (development mode)';
+            : 'NEXT_PUBLIC_RAKUTEN_APP_ID not configured (development mode)';
         } else {
           responseMessage = 'ホテル検索でエラーが発生しました。ネットワーク接続を確認し、再度お試しください。';
         }
@@ -347,7 +347,7 @@ export async function GET(request: NextRequest) {
       },
       message: responseMessage,
               debug: isInspectMode ? {
-          hasAppId: !!process.env.RAKUTEN_APP_ID,
+          hasAppId: !!process.env.NEXT_PUBLIC_RAKUTEN_APP_ID,
           success: apiSuccess,
           error: apiError,
           statusCode: apiStatusCode,
@@ -404,7 +404,7 @@ export async function GET(request: NextRequest) {
         isSample: false,
         fallback: false,
         debug: process.env.NODE_ENV === 'development' ? {
-          hasAppId: !!process.env.RAKUTEN_APP_ID,
+          hasAppId: !!process.env.NEXT_PUBLIC_RAKUTEN_APP_ID,
           success: false,
           error: error instanceof Error ? error.message : String(error),
           apiEndpoint: 'VacantHotelSearch/20170426'
