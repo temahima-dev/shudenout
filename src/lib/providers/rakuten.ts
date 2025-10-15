@@ -436,13 +436,12 @@ export async function fetchCandidates(params: {
     baseParams = {
       applicationId: process.env.NEXT_PUBLIC_RAKUTEN_APP_ID || '',
       format: "json",
-      latitude: lat?.toString() || "35.6905", // 新宿デフォルト
-      longitude: lng?.toString() || "139.7004", // 新宿デフォルト
+      latitude: lat?.toString() || "35.6938", // 新宿駅座標
+      longitude: lng?.toString() || "139.7034", // 新宿駅座標
       searchRadius: "3", // 固定3km
       datumType: '1', // WGS84度単位（必須）
-      hits: '30',
-      page: '1',
-      responseType: 'small'
+      hits: '10', // 取得件数を10に制限
+      page: '1'
     };
 
     apiSource = 'SimpleHotelSearch';
@@ -457,7 +456,8 @@ export async function fetchCandidates(params: {
         searchParams.set('page', page.toString());
 
         const url = `${baseUrl}?${searchParams}`;
-        console.log("FETCH URL:", url);
+        console.log("🌐 FETCH URL:", url);
+        console.log("🔧 API Parameters:", Object.fromEntries(searchParams.entries()));
         const pageStartTime = Date.now();
         
         const response = await fetch(url, { cache: 'no-store' });

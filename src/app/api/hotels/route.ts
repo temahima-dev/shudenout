@@ -167,6 +167,14 @@ export async function GET(request: NextRequest) {
     // 楽天APP_IDが設定されているかチェック
     const rakutenAppId = process.env.NEXT_PUBLIC_RAKUTEN_APP_ID;
     
+    // 🔍 環境変数読み込み状況をログ出力（Vercelデバッグ用）
+    console.log('🔑 Environment variables check:', {
+      hasRakutenAppId: !!rakutenAppId,
+      rakutenAppIdLength: rakutenAppId?.length || 0,
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV || 'local'
+    });
+    
     if (!rakutenAppId) {
       console.error('❌ NEXT_PUBLIC_RAKUTEN_APP_ID not configured');
       apiSuccess = false;
@@ -343,7 +351,7 @@ export async function GET(request: NextRequest) {
         checkinDate: today,
         checkoutDate: tomorrow,
         adultNum,
-        isVacantSearch: true // 常にVacantHotelSearch使用を明示
+        isVacantSearch: false // 🚧 Vercel環境デバッグのため一時的に無効化
       },
       message: responseMessage,
               debug: isInspectMode ? {
