@@ -1,11 +1,18 @@
-// Cache bust: 1760583000 - FORCE PRIVACY LINK REMOVAL
+// CACHE BUST: 1729080000 - ULTIMATE PRIVACY REMOVAL
 import Link from "next/link";
 
 export default function Footer() {
+  // Force cache invalidation with timestamp
+  const cacheBust = Date.now();
+  
   return (
-    <footer className="bg-gray-900 text-white py-8 mt-12">
+    <footer 
+      className="bg-gray-900 text-white py-8 mt-12" 
+      data-cache-bust={cacheBust}
+      key={`footer-${cacheBust}`}
+    >
       <div className="max-w-6xl mx-auto px-4">
-        {/* ナビゲーションリンク */}
+        {/* ナビゲーションリンク - NO PRIVACY LINK */}
         <div className="flex justify-center space-x-8 mb-6">
           <Link
             href="/faq"

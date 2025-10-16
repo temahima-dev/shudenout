@@ -10,7 +10,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0"
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0, stale-while-revalidate=0"
         },
         {
           "key": "Pragma", 
@@ -18,11 +18,11 @@
         },
         {
           "key": "Expires",
-          "value": "0"
+          "value": "Thu, 01 Jan 1970 00:00:00 GMT"
         },
         {
           "key": "Surrogate-Control",
-          "value": "no-store"
+          "value": "no-store, max-age=0"
         },
         {
           "key": "X-Vercel-Cache",
@@ -31,6 +31,14 @@
         {
           "key": "Vary",
           "value": "*"
+        },
+        {
+          "key": "X-Accel-Expires",
+          "value": "0"
+        },
+        {
+          "key": "Last-Modified",
+          "value": "Thu, 01 Jan 1970 00:00:00 GMT"
         }
       ]
     }
