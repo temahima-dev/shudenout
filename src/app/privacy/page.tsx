@@ -58,7 +58,8 @@ export default function Privacy() {
           </section>
 
           <section className="text-sm text-gray-500 border-t pt-4">
-            <p>最終更新日: 2024年10月15日</p>
+            <p>最終更新日: 2024年10月16日</p>
+            <p className="mt-2 text-xs">Build: {new Date().toISOString()}</p>
           </section>
         </div>
       </div>
