@@ -19,7 +19,7 @@ export default function Footer() {
             利用規約
           </Link>
           <Link
-            href="/privacy"
+            href="/privacy-policy"
             className="text-gray-400 hover:text-white transition-colors text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
           >
             プライバシーポリシー
