@@ -5,8 +5,11 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "postbuild": "node scripts/check-env.js",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check-env": "node scripts/check-env.js",
+    "env-sync": "echo 'Run: vercel env pull .env.production' to sync production env vars"
   },
   "dependencies": {
     "next": "15.5.0",

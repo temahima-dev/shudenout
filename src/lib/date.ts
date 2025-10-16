@@ -6,3 +6,4 @@ export function todayTomorrowJST() {
   const format = (d: Date) => d.toISOString().split('T')[0];
   return { today: format(today), tomorrow: format(tomorrow) };
 }
+
