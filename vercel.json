@@ -10,10 +10,10 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0"
         },
         {
-          "key": "Pragma",
+          "key": "Pragma", 
           "value": "no-cache"
         },
         {
@@ -23,11 +23,20 @@
         {
           "key": "Surrogate-Control",
           "value": "no-store"
+        },
+        {
+          "key": "X-Vercel-Cache",
+          "value": "BYPASS"
+        },
+        {
+          "key": "Vary",
+          "value": "*"
         }
       ]
     }
   ],
-  "rewrites": [],
+  "cleanUrls": true,
+  "trailingSlash": false,
   "redirects": [
     {
       "source": "/privacy",
@@ -35,8 +44,8 @@
       "permanent": true
     },
     {
-      "source": "/privacy-policy",
-      "destination": "/terms", 
+      "source": "/privacy-policy", 
+      "destination": "/terms",
       "permanent": true
     }
   ]
