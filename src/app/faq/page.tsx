@@ -1,4 +1,5 @@
 import { type Metadata } from "next";
+import Header from "@/app/components/Header";
 import StructuredData from "@/app/components/StructuredData";
 import { generateMetadata, generateFAQStructuredData } from "@/lib/seo";
 
@@ -49,6 +50,7 @@ export default function FAQPage() {
   return (
     <>
       <StructuredData data={faqStructuredData} />
+      <Header />
       
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 py-8">

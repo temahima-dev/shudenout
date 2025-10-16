@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import Header from "@/app/components/Header";
 
 export const metadata: Metadata = {
   title: "利用規約・プライバシーポリシー | ShuDen Out",
@@ -7,7 +8,9 @@ export const metadata: Metadata = {
 
 export default function Terms() {
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
+    <>
+      <Header />
+      <div className="max-w-4xl mx-auto px-4 py-12">
       <h1 className="text-3xl font-bold text-gray-900 mb-8">利用規約・プライバシーポリシー</h1>
       
       <div className="prose prose-gray max-w-none">
@@ -46,7 +49,8 @@ export default function Terms() {
           最終更新日: 2024年10月16日
         </p>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
