@@ -1,4 +1,4 @@
-// Cache bust: 1760581427
+// Cache bust: 1760583000 - FORCE PRIVACY LINK REMOVAL
 import Link from "next/link";
 
 export default function Footer() {
