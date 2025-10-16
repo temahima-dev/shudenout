@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: { 
-    serverActions: true 
+    serverActions: {
+      allowedOrigins: ['localhost:3000', 'shudenout.com', 'www.shudenout.com']
+    }
   },
   eslint: {
     ignoreDuringBuilds: true,

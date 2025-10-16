@@ -1,4 +1,5 @@
-// Cache bust: 1760581427import Link from "next/link";
+// Cache bust: 1760581427
+import Link from "next/link";
 
 export default function Footer() {
   return (
